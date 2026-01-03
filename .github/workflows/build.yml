@@ -16,10 +16,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          targets_json='[
-            {"aws_account_id":"111111111111","repo_name":"service-a","env":"staging"},
-            {"aws_account_id":"222222222222","repo_name":"service-b","env":"production"}
-          ]'
+          targets_json='[{"aws_account_id":"111111111111","repo_name":"service-a","env":"staging"},{"aws_account_id":"222222222222","repo_name":"service-b","env":"production"}]'
 
           echo "targets=$targets_json" >> "$GITHUB_OUTPUT"
 

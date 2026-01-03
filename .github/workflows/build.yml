@@ -1,0 +1,40 @@
+name: POC
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    name: Generate target matrix
+    runs-on: ubuntu-slim
+    outputs:
+      targets: ${{ steps.build.outputs.targets }}
+    steps:
+      - name: Build JSON list of target objects
+        id: build
+        run: |
+          set -euo pipefail
+
+          targets_json='[
+            {"aws_account_id":"111111111111","repo_name":"service-a","env":"staging"},
+            {"aws_account_id":"222222222222","repo_name":"service-b","env":"production"}
+          ]'
+
+          echo "targets=$targets_json" >> "$GITHUB_OUTPUT"
+
+  run_for_each_target:
+    name: Run per target
+    needs: generate
+    runs-on: ubuntu-slim
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.generate.outputs.targets) }}
+
+    steps:
+      - name: Show target
+        run: |
+          echo "aws_account_id=${{ matrix.target.aws_account_id }}"
+          echo "repo_name=${{ matrix.target.repo_name }}"
+          echo "env=${{ matrix.target.env }}"

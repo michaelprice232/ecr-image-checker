@@ -1,0 +1,6 @@
+aws_account_id: 111111111111
+repo_name: image-1
+repo_tag: alpine-3
+target_platforms:
+  - "linux/amd64"
+  - "linux/arm64"

@@ -8,15 +8,30 @@ and outputs GitHub Action JSON config for any that are missing so that they can 
 Steps:
 
 - Setup sample GHA pipeline to validate JSON structure
+- Configure sample file structure locally
 - Add a configurable slog logger. Set default to ERROR
 - Parse the command line parameters. Initially just "run" for the normal workflow and "lint" for the config linter
-- Create a struct object which will contain the go-containerregistry and AWS clients. Use interfaces to allow for testing
+- Create a struct object which will contain the go-containerregistry and AWS clients
 - Parse top level YAML file which contains defaults and build map
 - Parse all root directories and YAML files and build struct field. Merge over the top level defaults map
+- Add 2 clients to the struct. Use interfaces to allow for testing
 - Use AWS client to get ECR auth token. This is per account and region so will need to store multiple: struct field?
 - Iterate through and use go-containerregistry to check if the target Docker tag is present. Store any missing ones
 - Build JSON output string which will be passed as an output to the GHA job 
 
 
+Notes:
+
+- Can't use multiple GHA matrix's as this results in all images being built for all accounts. Limit to 1 target account per image in v1
+- When mixing flags and position parameters the flags must go first by default
 
 
+## Running
+
+```shell
+# Log level defaults to error. Image directory defaults to the current working directory
+
+LOG_LEVEL=info go run main.go --image-directory=. run
+
+LOG_LEVEL=info go run main.go --image-directory=. run
+```

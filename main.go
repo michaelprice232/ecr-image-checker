@@ -36,7 +36,7 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		slog.Error("expected either 'run' or 'lint' command line parameter", "got", os.Args[0])
+		slog.Error("expected either 'run' or 'lint' command line parameter", "got", flag.Arg(0))
 		os.Exit(1)
 	}
 }

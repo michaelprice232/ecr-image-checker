@@ -64,3 +64,27 @@ jobs:
           echo "aws_role_arn=${{ matrix.target.aws_role_arn }}"
           echo "full_image_ref=${{ matrix.target.full_image_ref }}"
           echo "target_platforms=${{ matrix.target.target_platforms }}"
+          echo "working_directory=${{ matrix.target.working_directory }}"
+
+      - name: Configure Base AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ env.BASE_REGION }}
+
+      - name: Configure AWS credentials via assume role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ matrix.target.aws_role_arn }}
+          role-chaining: true
+          aws-region: ${{ matrix.target.aws_region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & push Docker image
+        env:
+        run: |
+          docker build -t "${{ matrix.target.full_image_ref }}" ${{ matrix.target.working_directory }}
+          docker push "${{ matrix.target.full_image_ref }}"

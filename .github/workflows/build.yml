@@ -1,24 +1,55 @@
 name: POC
 
 on:
-  push:
-  workflow_dispatch:
+  push: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  BASE_AWS_ACCOUNT: "077439031059"
+  BASE_REGION: "eu-west-1"
+  BASE_IAM_ROLE_NAME: "mike-github-test"  # oidc role
 
 jobs:
   generate:
     name: Generate target matrix
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.build.outputs.targets }}
     steps:
-      - name: Build JSON list of target objects
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ env.BASE_REGION }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build binary
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          go build -v -o ecr-image-checker ecr-image-checker.go
+          chmod +x ecr-image-checker
+
+      - name: Build target JSON
         id: build
         run: |
           set -euo pipefail
+          
+          ./ecr-image-checker --image-directory="images" run >> "$GITHUB_OUTPUT"
 
-          targets_json='[{"aws_account_id":"111111111111","repo_name":"service-a","env":"staging"},{"aws_account_id":"222222222222","repo_name":"service-b","env":"production"}]'
-
-          echo "targets=$targets_json" >> "$GITHUB_OUTPUT"
+          #echo "targets=$targets_json" >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target
@@ -34,4 +65,3 @@ jobs:
         run: |
           echo "aws_account_id=${{ matrix.target.aws_account_id }}"
           echo "repo_name=${{ matrix.target.repo_name }}"
-          echo "env=${{ matrix.target.env }}"

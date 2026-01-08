@@ -1,4 +1,3 @@
-aws_role_name: mike-ecr-query
 aws_region: eu-west-1
 target_platforms:
   - "linux/arm64"

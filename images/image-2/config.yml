@@ -1,3 +1,4 @@
+aws_region: ca-central-1 # Canada
 aws_account_id: 077439031059  # staging
-repo_name: mongo
-repo_tag: bad
+repo_name: mike-another-region-test
+repo_tag: my-tag

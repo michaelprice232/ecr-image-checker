@@ -1,3 +1,4 @@
+aws_role_name: mike-ecr-query
 aws_account_id: 077439031059  # staging
 repo_name: mike-test
 repo_tag: alpine-3

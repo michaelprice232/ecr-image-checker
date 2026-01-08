@@ -11,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrTypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -20,6 +21,7 @@ import (
 const (
 	defaultConfigFile = "config-defaults.yml"
 	childConfigFile   = "config.yml"
+	appName           = "ecr-image-checker"
 )
 
 type repoConfig struct {
@@ -34,6 +36,7 @@ type repoConfig struct {
 	WorkingDirectory string
 	FullImageRef     string
 	RemoteTagMissing bool
+	AWSRoleARN       string
 }
 
 type config struct {
@@ -49,13 +52,13 @@ func newConfig() (config, error) {
 	if err != nil {
 		return config{}, fmt.Errorf("loading AWS config: %w", err)
 	}
+
+	// ECR client is initialized dynamically for each target account/region combo
 	stsClient := sts.NewFromConfig(awsCfg)
-	ecrClient := ecr.NewFromConfig(awsCfg)
 
 	c := config{
 		repos:     make(map[string]repoConfig),
 		stsClient: stsClient,
-		ecrClient: ecrClient,
 	}
 
 	return c, nil
@@ -133,14 +136,20 @@ func (c *config) addCalculatedFields() {
 		repo.FullImageRef = fmt.Sprintf("%s.dkr.ecr.%s.amazonaws.com/%s:%s", *repo.AwsAccountId, *repo.Region, *repo.RepoName, *repo.RepoTag)
 		repo.WorkingDirectory = path.Dir(key)
 
+		if repo.AwsRoleName != nil && len(*repo.AwsRoleName) > 0 {
+			repo.AWSRoleARN = fmt.Sprintf("arn:aws:iam::%s:role/%s", *repo.AwsAccountId, *repo.AwsRoleName)
+		}
+
 		c.repos[key] = repo
 	}
 }
 
 func (c *config) checkECRImageTags() error {
-	// todo: assume role in target account and region
-
 	for key, repo := range c.repos {
+		if err := c.setupECRClient(repo); err != nil {
+			return fmt.Errorf("setting up ECR client: %w", err)
+		}
+
 		remoteTagMissing := true
 		ecrImages := &ecr.ListImagesOutput{}
 		var err error
@@ -164,7 +173,7 @@ func (c *config) checkECRImageTags() error {
 			if ecrImages != nil {
 				for _, image := range ecrImages.ImageIds {
 					if image.ImageTag != nil && *image.ImageTag == *repo.RepoTag {
-						slog.Info("Found image tag", "repo", *repo.RepoName, "tag", *repo.RepoTag)
+						slog.Debug("Found image tag", "repo", *repo.RepoName, "tag", *repo.RepoTag)
 						remoteTagMissing = false
 						break
 					}
@@ -194,43 +203,73 @@ func (c *config) checkECRImageTags() error {
 	return nil
 }
 
+func (c *config) setupECRClient(repo repoConfig) error {
+	awsCfg, err := awsConfig.LoadDefaultConfig(context.Background(), func(o *awsConfig.LoadOptions) error {
+		o.Region = *repo.Region
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("loading AWS config: %w", err)
+	}
+
+	if repo.AwsRoleName != nil {
+		slog.Debug("Assuming role", "role", repo.AWSRoleARN, "repo", *repo.RepoName)
+		creds := stscreds.NewAssumeRoleProvider(c.stsClient, repo.AWSRoleARN, func(o *stscreds.AssumeRoleOptions) {
+			o.RoleSessionName = appName
+		})
+		awsCfg.Credentials = aws.NewCredentialsCache(creds)
+		c.ecrClient = ecr.NewFromConfig(awsCfg)
+
+		return nil
+	}
+
+	slog.Debug("No assume IAM role defined. Using normal credential chain", "repo", *repo.RepoName)
+	c.ecrClient = ecr.NewFromConfig(awsCfg)
+
+	return nil
+}
+
 func (c *config) displayConfig() {
-	for key, repoConf := range c.repos {
+	for key, childRepoConf := range c.repos {
 		fmt.Printf("> Displaying %s\n", key)
 
-		if repoConf.Region != nil {
-			fmt.Printf("Region: %s\n", *repoConf.Region)
+		if childRepoConf.Region != nil {
+			fmt.Printf("Region: %s\n", *childRepoConf.Region)
 		}
 
-		if repoConf.AwsAccountId != nil {
-			fmt.Printf("AWS Account ID: %s\n", *repoConf.AwsAccountId)
+		if childRepoConf.AwsAccountId != nil {
+			fmt.Printf("AWS Account ID: %s\n", *childRepoConf.AwsAccountId)
 		}
 
-		if repoConf.RepoName != nil {
-			fmt.Printf("Repo name: %s\n", *repoConf.RepoName)
+		if childRepoConf.RepoName != nil {
+			fmt.Printf("Repo name: %s\n", *childRepoConf.RepoName)
 		}
 
-		if repoConf.RepoTag != nil {
-			fmt.Printf("Repo tag: %s\n", *repoConf.RepoTag)
+		if childRepoConf.RepoTag != nil {
+			fmt.Printf("Repo tag: %s\n", *childRepoConf.RepoTag)
 		}
 
-		if repoConf.TargetPlatforms != nil && len(repoConf.TargetPlatforms) > 0 {
-			fmt.Printf("Target platforms: %s\n", repoConf.TargetPlatforms)
+		if childRepoConf.TargetPlatforms != nil && len(childRepoConf.TargetPlatforms) > 0 {
+			fmt.Printf("Target platforms: %s\n", childRepoConf.TargetPlatforms)
 		}
 
-		if repoConf.AwsRoleName != nil {
-			fmt.Printf("AWS role name: %s\n", *repoConf.AwsRoleName)
+		if childRepoConf.AwsRoleName != nil {
+			fmt.Printf("AWS role name: %s\n", *childRepoConf.AwsRoleName)
 		}
 
-		if repoConf.WorkingDirectory != "" {
-			fmt.Printf("Working directory: %s\n", repoConf.WorkingDirectory)
+		if childRepoConf.WorkingDirectory != "" {
+			fmt.Printf("Working directory: %s\n", childRepoConf.WorkingDirectory)
 		}
 
-		if repoConf.FullImageRef != "" {
-			fmt.Printf("Full image ref: %s\n", repoConf.FullImageRef)
+		if childRepoConf.FullImageRef != "" {
+			fmt.Printf("Full image ref: %s\n", childRepoConf.FullImageRef)
 		}
 
-		fmt.Printf("Remote tag missing: %t\n", repoConf.RemoteTagMissing)
+		if childRepoConf.AWSRoleARN != "" {
+			fmt.Printf("AWS Role ARN: %s\n", childRepoConf.AWSRoleARN)
+		}
+
+		fmt.Printf("Remote tag missing: %t\n", childRepoConf.RemoteTagMissing)
 	}
 }
 

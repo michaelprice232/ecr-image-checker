@@ -91,5 +91,4 @@ jobs:
 
       - name: Build & push Docker image
         run: |
-          docker buildx build --platform ${{ matrix.target.target_platforms }} -t "${{ matrix.target.full_image_ref }}" ${{ matrix.target.working_directory }}
-          docker push "${{ matrix.target.full_image_ref }}"
+          docker buildx build --push --platform ${{ matrix.target.target_platforms }} -t "${{ matrix.target.full_image_ref }}" ${{ matrix.target.working_directory }}

@@ -39,17 +39,12 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: 0
         run: |
-          go build -v -o ecr-image-checker ecr-image-checker.go
+          go build -o ecr-image-checker ecr-image-checker.go
           chmod +x ecr-image-checker
 
       - name: Build target JSON
         id: build
-        run: |
-          set -euo pipefail
-          
-          ./ecr-image-checker --image-directory="images" run >> "$GITHUB_OUTPUT"
-
-          #echo "targets=$targets_json" >> "$GITHUB_OUTPUT"
+        run: ./ecr-image-checker --image-directory="images" run >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target
@@ -64,4 +59,8 @@ jobs:
       - name: Show target
         run: |
           echo "aws_account_id=${{ matrix.target.aws_account_id }}"
+          echo "aws_region=${{ matrix.target.aws_region }}"
           echo "repo_name=${{ matrix.target.repo_name }}"
+          echo "aws_role_arn=${{ matrix.target.aws_role_arn }}"
+          echo "full_image_ref=${{ matrix.target.full_image_ref }}"
+          echo "target_platforms=${{ matrix.target.target_platforms }}"

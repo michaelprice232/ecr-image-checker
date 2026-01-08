@@ -31,13 +31,14 @@ type repoConfig struct {
 	AwsRoleName     *string  `yaml:"aws_role_name" json:"aws_role_name"`
 	RepoName        *string  `yaml:"repo_name" json:"repo_name"`
 	RepoTag         *string  `yaml:"repo_tag" json:"repo_tag"`
-	TargetPlatforms []string `yaml:"target_platforms" json:"target_platforms"`
+	TargetPlatforms []string `yaml:"target_platforms" json:"target_platforms_slice"`
 
 	// Calculated fields not passed via YAML
-	WorkingDirectory string `json:"working_directory"`
-	FullImageRef     string `json:"full_image_ref"`
-	RemoteTagMissing bool   `json:"remote_tag_missing"`
-	AWSRoleARN       string `json:"aws_role_arn"`
+	WorkingDirectory  string `json:"working_directory"`
+	FullImageRef      string `json:"full_image_ref"`
+	RemoteTagMissing  bool   `json:"remote_tag_missing"`
+	AWSRoleARN        string `json:"aws_role_arn"`
+	TargetPlatformStr string `json:"target_platforms"`
 }
 
 type config struct {
@@ -143,6 +144,10 @@ func (c *config) addCalculatedFields() {
 
 		if repo.AwsRoleName != nil && len(*repo.AwsRoleName) > 0 {
 			repo.AWSRoleARN = fmt.Sprintf("arn:aws:iam::%s:role/%s", *repo.AwsAccountId, *repo.AwsRoleName)
+		}
+
+		if repo.TargetPlatforms != nil && len(repo.TargetPlatforms) > 0 {
+			repo.TargetPlatformStr = strings.Join(repo.TargetPlatforms, ",")
 		}
 
 		c.repos[key] = repo

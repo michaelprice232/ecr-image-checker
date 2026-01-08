@@ -67,13 +67,13 @@ jobs:
           echo "working_directory=${{ matrix.target.working_directory }}"
 
       - name: Configure Base AWS credentials using OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
           aws-region: ${{ env.BASE_REGION }}
 
       - name: Configure AWS credentials via assume role
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ matrix.target.aws_role_arn }}
           role-chaining: true

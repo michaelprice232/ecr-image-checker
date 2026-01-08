@@ -1,29 +1,55 @@
 name: POC
 
 on:
-  push:
-  workflow_dispatch:
+  push: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  BASE_AWS_ACCOUNT: "077439031059"
+  BASE_REGION: "eu-west-1"
+  BASE_IAM_ROLE_NAME: "mike-github-test"  # oidc role
 
 jobs:
   generate:
     name: Generate target matrix
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.build.outputs.targets }}
     steps:
-      - name: Build JSON list of target objects
-        id: build
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ env.BASE_REGION }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build binary
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
         run: |
-          set -euo pipefail
+          go build -o ecr-image-checker ecr-image-checker.go
+          chmod +x ecr-image-checker
 
-          targets_json='[{"aws_account_id":"111111111111","repo_name":"service-a","env":"staging"},{"aws_account_id":"222222222222","repo_name":"service-b","env":"production"}]'
-
-          echo "targets=$targets_json" >> "$GITHUB_OUTPUT"
+      - name: Build target JSON
+        id: build
+        run: ./ecr-image-checker --image-directory="images" run >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target
     needs: generate
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -33,5 +59,36 @@ jobs:
       - name: Show target
         run: |
           echo "aws_account_id=${{ matrix.target.aws_account_id }}"
+          echo "aws_region=${{ matrix.target.aws_region }}"
           echo "repo_name=${{ matrix.target.repo_name }}"
-          echo "env=${{ matrix.target.env }}"
+          echo "aws_role_arn=${{ matrix.target.aws_role_arn }}"
+          echo "full_image_ref=${{ matrix.target.full_image_ref }}"
+          echo "target_platforms=${{ matrix.target.target_platforms }}"
+          echo "working_directory=${{ matrix.target.working_directory }}"
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure Base AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ env.BASE_REGION }}
+
+      # Only required if the ECR repos are in different accounts and there are no resource level policies in place
+      - name: Configure AWS credentials via assume role
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ matrix.target.aws_role_arn }}
+          role-chaining: true
+          aws-region: ${{ matrix.target.aws_region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push Docker image
+        run: docker buildx build --push --platform ${{ matrix.target.target_platforms }} -t "${{ matrix.target.full_image_ref }}" ${{ matrix.target.working_directory }}

@@ -2,6 +2,7 @@ package checker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -25,18 +26,19 @@ const (
 )
 
 type repoConfig struct {
-	Region          *string  `yaml:"aws_region"`
-	AwsAccountId    *string  `yaml:"aws_account_id"`
-	AwsRoleName     *string  `yaml:"aws_role_name"`
-	RepoName        *string  `yaml:"repo_name"`
-	RepoTag         *string  `yaml:"repo_tag"`
-	TargetPlatforms []string `yaml:"target_platforms"`
+	Region          *string  `yaml:"aws_region" json:"aws_region"`
+	AwsAccountId    *string  `yaml:"aws_account_id" json:"aws_account_id"`
+	AwsRoleName     *string  `yaml:"aws_role_name" json:"aws_role_name"`
+	RepoName        *string  `yaml:"repo_name" json:"repo_name"`
+	RepoTag         *string  `yaml:"repo_tag" json:"repo_tag"`
+	TargetPlatforms []string `yaml:"target_platforms" json:"target_platforms_slice"`
 
 	// Calculated fields not passed via YAML
-	WorkingDirectory string
-	FullImageRef     string
-	RemoteTagMissing bool
-	AWSRoleARN       string
+	WorkingDirectory  string `json:"working_directory"`
+	FullImageRef      string `json:"full_image_ref"`
+	RemoteTagMissing  bool   `json:"remote_tag_missing"`
+	AWSRoleARN        string `json:"aws_role_arn"`
+	TargetPlatformStr string `json:"target_platforms"`
 }
 
 type config struct {
@@ -89,7 +91,11 @@ func Run(imageDirectory string) error {
 		return fmt.Errorf("checking ECR tags: %w", err)
 	}
 
-	c.displayConfig()
+	//c.displayConfig()
+
+	if err = c.outputGitHubJSON(); err != nil {
+		return fmt.Errorf("outputting GitHub JSON: %w", err)
+	}
 
 	return nil
 }
@@ -138,6 +144,10 @@ func (c *config) addCalculatedFields() {
 
 		if repo.AwsRoleName != nil && len(*repo.AwsRoleName) > 0 {
 			repo.AWSRoleARN = fmt.Sprintf("arn:aws:iam::%s:role/%s", *repo.AwsAccountId, *repo.AwsRoleName)
+		}
+
+		if repo.TargetPlatforms != nil && len(repo.TargetPlatforms) > 0 {
+			repo.TargetPlatformStr = strings.Join(repo.TargetPlatforms, ",")
 		}
 
 		c.repos[key] = repo
@@ -271,6 +281,36 @@ func (c *config) displayConfig() {
 
 		fmt.Printf("Remote tag missing: %t\n", childRepoConf.RemoteTagMissing)
 	}
+}
+
+func (c *config) outputGitHubJSON() error {
+	missingTags := filterMissingTags(c.repos)
+
+	if len(missingTags) == 0 {
+		fmt.Printf("targets=%s\n", "[]")
+		return nil
+	}
+
+	b, err := json.Marshal(missingTags)
+	if err != nil {
+		return fmt.Errorf("marshalling JSON: %w", err)
+	}
+
+	fmt.Printf("targets=%s\n", string(b))
+
+	return nil
+}
+
+func filterMissingTags(original map[string]repoConfig) []repoConfig {
+	missingTags := make([]repoConfig, 0)
+
+	for _, repo := range original {
+		if repo.RemoteTagMissing {
+			missingTags = append(missingTags, repo)
+		}
+	}
+
+	return missingTags
 }
 
 func parseYAMLFile(path string) (repoConfig, error) {

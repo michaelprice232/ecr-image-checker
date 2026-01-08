@@ -3,3 +3,6 @@ aws_region: ca-central-1 # Canada
 aws_account_id: 077439031059  # staging
 repo_name: mike-another-region-test
 repo_tag: my-tag-missing
+target_platforms:
+  - "linux/arm64"
+  - "linux/amd64"

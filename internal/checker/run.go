@@ -287,6 +287,7 @@ func (c *config) outputGitHubJSON() error {
 	missingTags := filterMissingTags(c.repos)
 
 	if len(missingTags) == 0 {
+		fmt.Printf("targets=%s\n", "[]")
 		return nil
 	}
 

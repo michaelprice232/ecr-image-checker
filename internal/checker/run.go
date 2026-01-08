@@ -26,7 +26,7 @@ const (
 )
 
 type repoConfig struct {
-	Region          *string  `yaml:"aws_region" json:"region"`
+	Region          *string  `yaml:"aws_region" json:"aws_region"`
 	AwsAccountId    *string  `yaml:"aws_account_id" json:"aws_account_id"`
 	AwsRoleName     *string  `yaml:"aws_role_name" json:"aws_role_name"`
 	RepoName        *string  `yaml:"repo_name" json:"repo_name"`

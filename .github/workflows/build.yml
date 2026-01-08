@@ -84,7 +84,6 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build & push Docker image
-        env:
         run: |
           docker build -t "${{ matrix.target.full_image_ref }}" ${{ matrix.target.working_directory }}
           docker push "${{ matrix.target.full_image_ref }}"

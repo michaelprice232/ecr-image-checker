@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -8,6 +9,11 @@ import (
 	"path"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrTypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,15 +33,29 @@ type repoConfig struct {
 	// Calculated fields not passed via YAML
 	WorkingDirectory string
 	FullImageRef     string
+	RemoteTagMissing bool
 }
 
 type config struct {
 	repos map[string]repoConfig
+
+	// AWS clients
+	stsClient *sts.Client
+	ecrClient *ecr.Client
 }
 
 func newConfig() (config, error) {
+	awsCfg, err := awsConfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return config{}, fmt.Errorf("loading AWS config: %w", err)
+	}
+	stsClient := sts.NewFromConfig(awsCfg)
+	ecrClient := ecr.NewFromConfig(awsCfg)
+
 	c := config{
-		repos: make(map[string]repoConfig),
+		repos:     make(map[string]repoConfig),
+		stsClient: stsClient,
+		ecrClient: ecrClient,
 	}
 
 	return c, nil
@@ -62,18 +82,13 @@ func Run(imageDirectory string) error {
 
 	c.addCalculatedFields()
 
+	if err = c.checkECRImageTags(); err != nil {
+		return fmt.Errorf("checking ECR tags: %w", err)
+	}
+
 	c.displayConfig()
 
 	return nil
-}
-
-func (c *config) addCalculatedFields() {
-	for idx, repo := range c.repos {
-		repo.FullImageRef = fmt.Sprintf("%s.dkr.ecr.%s.amazonaws.com/%s:%s", *repo.AwsAccountId, *repo.Region, *repo.RepoName, *repo.RepoTag)
-		repo.WorkingDirectory = path.Dir(idx)
-
-		c.repos[idx] = repo
-	}
 }
 
 func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoConfig) error {
@@ -86,7 +101,7 @@ func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoC
 	}
 
 	for _, baseDir := range baseDirectories {
-		// Ignore hidden directories and plain files
+		// Ignore plain files and hidden directories
 		if !baseDir.IsDir() || strings.HasPrefix(baseDir.Name(), ".") {
 			continue
 		}
@@ -96,7 +111,7 @@ func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoC
 		childConfigData, err := parseYAMLFile(sourceConfigFilePath)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				slog.Warn("Skipping child config file as it doesn't exist", "path", sourceConfigFilePath)
+				slog.Warn("Skipping directory as child config file doesn't exist", "path", sourceConfigFilePath)
 				continue
 			} else {
 				return fmt.Errorf("parsing YAML file (%s): %w", sourceConfigFilePath, err)
@@ -113,9 +128,75 @@ func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoC
 	return nil
 }
 
+func (c *config) addCalculatedFields() {
+	for key, repo := range c.repos {
+		repo.FullImageRef = fmt.Sprintf("%s.dkr.ecr.%s.amazonaws.com/%s:%s", *repo.AwsAccountId, *repo.Region, *repo.RepoName, *repo.RepoTag)
+		repo.WorkingDirectory = path.Dir(key)
+
+		c.repos[key] = repo
+	}
+}
+
+func (c *config) checkECRImageTags() error {
+	// todo: assume role in target account and region
+
+	for key, repo := range c.repos {
+		remoteTagMissing := true
+		ecrImages := &ecr.ListImagesOutput{}
+		var err error
+		nextToken := ""
+
+		for {
+			listImagesInput := &ecr.ListImagesInput{
+				RepositoryName: repo.RepoName,
+				Filter:         &ecrTypes.ListImagesFilter{TagStatus: ecrTypes.TagStatusTagged},
+			}
+
+			if nextToken != "" {
+				listImagesInput.NextToken = aws.String(nextToken)
+			}
+
+			ecrImages, err = c.ecrClient.ListImages(context.Background(), listImagesInput)
+			if err != nil {
+				return fmt.Errorf("listing Docker tags for %s: %w", *repo.RepoName, err)
+			}
+
+			if ecrImages != nil {
+				for _, image := range ecrImages.ImageIds {
+					if image.ImageTag != nil && *image.ImageTag == *repo.RepoTag {
+						slog.Info("Found image tag", "repo", *repo.RepoName, "tag", *repo.RepoTag)
+						remoteTagMissing = false
+						break
+					}
+				}
+			}
+
+			// Found remote image ref
+			if !remoteTagMissing {
+				break
+			}
+
+			// No more remote images to check
+			if ecrImages == nil || ecrImages.NextToken == nil {
+				break
+			}
+
+			nextToken = *ecrImages.NextToken
+		}
+
+		// Flag the Docker tag as needing to be built
+		if remoteTagMissing {
+			repo.RemoteTagMissing = true
+			c.repos[key] = repo
+		}
+	}
+
+	return nil
+}
+
 func (c *config) displayConfig() {
-	for idx, repoConf := range c.repos {
-		fmt.Printf("> Displaying %s\n", idx)
+	for key, repoConf := range c.repos {
+		fmt.Printf("> Displaying %s\n", key)
 
 		if repoConf.Region != nil {
 			fmt.Printf("Region: %s\n", *repoConf.Region)
@@ -148,6 +229,8 @@ func (c *config) displayConfig() {
 		if repoConf.FullImageRef != "" {
 			fmt.Printf("Full image ref: %s\n", repoConf.FullImageRef)
 		}
+
+		fmt.Printf("Remote tag missing: %t\n", repoConf.RemoteTagMissing)
 	}
 }
 
@@ -166,31 +249,31 @@ func parseYAMLFile(path string) (repoConfig, error) {
 	return configData, nil
 }
 
-func mergeRepoConfig(defaultConf, repoConf repoConfig) repoConfig {
+func mergeRepoConfig(defaultConf, childRepoConf repoConfig) repoConfig {
 	finalConf := defaultConf
 
-	if repoConf.Region != nil {
-		finalConf.Region = repoConf.Region
+	if childRepoConf.Region != nil {
+		finalConf.Region = childRepoConf.Region
 	}
 
-	if repoConf.AwsAccountId != nil {
-		finalConf.AwsAccountId = repoConf.AwsAccountId
+	if childRepoConf.AwsAccountId != nil {
+		finalConf.AwsAccountId = childRepoConf.AwsAccountId
 	}
 
-	if repoConf.RepoName != nil {
-		finalConf.RepoName = repoConf.RepoName
+	if childRepoConf.AwsRoleName != nil {
+		finalConf.AwsRoleName = childRepoConf.AwsRoleName
 	}
 
-	if repoConf.RepoTag != nil {
-		finalConf.RepoTag = repoConf.RepoTag
+	if childRepoConf.RepoName != nil {
+		finalConf.RepoName = childRepoConf.RepoName
 	}
 
-	if repoConf.TargetPlatforms != nil && len(repoConf.TargetPlatforms) > 0 {
-		finalConf.TargetPlatforms = repoConf.TargetPlatforms
+	if childRepoConf.RepoTag != nil {
+		finalConf.RepoTag = childRepoConf.RepoTag
 	}
 
-	if repoConf.AwsRoleName != nil {
-		finalConf.AwsRoleName = repoConf.AwsRoleName
+	if childRepoConf.TargetPlatforms != nil && len(childRepoConf.TargetPlatforms) > 0 {
+		finalConf.TargetPlatforms = childRepoConf.TargetPlatforms
 	}
 
 	return finalConf

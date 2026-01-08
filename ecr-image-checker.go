@@ -48,7 +48,7 @@ func setLogLevel(level string) error {
 		logLevel.Set(slog.LevelError)
 	} else {
 		if err := logLevel.UnmarshalText([]byte(level)); err != nil {
-			return fmt.Errorf("unable to parse log level: %v", err)
+			return fmt.Errorf("unable to parse log level: %w", err)
 		}
 	}
 

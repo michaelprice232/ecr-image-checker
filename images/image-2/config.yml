@@ -1,0 +1,3 @@
+aws_account_id: 077439031059  # staging
+repo_name: mongo
+repo_tag: bad

@@ -66,6 +66,9 @@ jobs:
           echo "target_platforms=${{ matrix.target.target_platforms }}"
           echo "working_directory=${{ matrix.target.working_directory }}"
 
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Configure Base AWS credentials using OIDC
         uses: aws-actions/configure-aws-credentials@v5
         with:

@@ -8,6 +8,7 @@ and outputs GitHub Action JSON config for any that are missing so that they can 
 Todo:
 
 - Update YAMl schema to support multiple accounts and regions per image
+- Add linter functionality
 - Add unit tests
 - Make repo public and build with go-releaser so we can consume the binaries in other pipelines
 

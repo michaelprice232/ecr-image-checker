@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,17 +15,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	imageDirectory := flag.String("image-directory", ".", "Root directory which contains the image directories (each with it's own config file)")
-	flag.Parse()
+	// Default to current directory
+	imageDirectory := os.Getenv("IMAGE_DIRECTORY")
+	if imageDirectory == "" {
+		imageDirectory = "."
+	}
 
-	if len(flag.Args()) != 1 {
-		slog.Error("expected only 1 command line parameter", "got", len(flag.Args()))
+	if len(os.Args) != 2 {
+		slog.Error("expected only 1 command line parameter", "got", len(os.Args)-1)
 		os.Exit(1)
 	}
 
-	switch flag.Arg(0) {
+	switch os.Args[1] {
 	case "run":
-		if err := checker.Run(*imageDirectory); err != nil {
+		if err := checker.Run(imageDirectory); err != nil {
 			slog.Error("whilst running", "err", err)
 			os.Exit(1)
 		}
@@ -36,7 +38,7 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		slog.Error("expected either 'run' or 'lint' command line parameter", "got", flag.Arg(0))
+		slog.Error("expected either 'run' or 'lint' command line parameter", "got", os.Args[1])
 		os.Exit(1)
 	}
 }

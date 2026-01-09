@@ -7,13 +7,9 @@ and outputs GitHub Action JSON config for any that are missing so that they can 
 
 Todo:
 
-- Pass result back from console write to allow unit tests
-- Fix pipeline failing when there are no changes
-- Test cross account assume roles
-- Move existing parameter to envar
-- What to do with the display results function?
-- Add support for adding datetime suffix to Docker tag
-- Update YAMl schema to support multiple accounts and regions
+- Update YAMl schema to support multiple accounts and regions per image
+- Add unit tests
+- Make repo public and build with go-releaser so we can consume the binaries in other pipelines
 
 
 Notes:
@@ -22,6 +18,7 @@ Notes:
 - When mixing flags and position parameters the flags must go first by default
 - Assume the IAM role in the app itself as there may be multiple accounts, which can't be defined cleanly in the GitHub workflow itself
 - Can use the AWS client for listing Docker tags, no need for separate client
+- Don't add datetime suffix functionality otherwise there will be continual builds, which goes against the aim of this setup
 
 
 ## Running

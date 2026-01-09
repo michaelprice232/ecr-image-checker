@@ -93,9 +93,13 @@ func Run(imageDirectory string) error {
 
 	//c.displayConfig()
 
-	if err = c.outputGitHubJSON(); err != nil {
+	output, err := c.outputGitHubJSON()
+	if err != nil {
 		return fmt.Errorf("outputting GitHub JSON: %w", err)
 	}
+
+	// Output JSON to stdout which can be consumed by GitHub workflow matrix via an output
+	fmt.Println(output)
 
 	return nil
 }
@@ -283,22 +287,20 @@ func (c *config) displayConfig() {
 	}
 }
 
-func (c *config) outputGitHubJSON() error {
+func (c *config) outputGitHubJSON() (string, error) {
 	missingTags := filterMissingTags(c.repos)
 
+	// No Docker images to build
 	if len(missingTags) == 0 {
-		fmt.Printf("targets=%s\n", "[]")
-		return nil
+		return "targets=[]", nil
 	}
 
 	b, err := json.Marshal(missingTags)
 	if err != nil {
-		return fmt.Errorf("marshalling JSON: %w", err)
+		return "", fmt.Errorf("marshalling JSON: %w", err)
 	}
 
-	fmt.Printf("targets=%s\n", string(b))
-
-	return nil
+	return fmt.Sprintf("targets=%s\n", string(b)), nil
 }
 
 func filterMissingTags(original map[string]repoConfig) []repoConfig {

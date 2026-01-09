@@ -91,11 +91,13 @@ func Run(imageDirectory string) error {
 		return fmt.Errorf("checking ECR tags: %w", err)
 	}
 
-	//c.displayConfig()
-
-	if err = c.outputGitHubJSON(); err != nil {
+	output, err := c.outputGitHubJSON()
+	if err != nil {
 		return fmt.Errorf("outputting GitHub JSON: %w", err)
 	}
+
+	// Output JSON to stdout which can be consumed by GitHub workflow matrix via an output
+	fmt.Println(output)
 
 	return nil
 }
@@ -132,6 +134,15 @@ func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoC
 		finalConfigData = mergeRepoConfig(defaultConfigData, childConfigData)
 
 		c.repos[sourceConfigFilePath] = finalConfigData
+
+		slog.Debug("Child config",
+			"path", sourceConfigFilePath,
+			"aws_region", readStrPointer(finalConfigData.Region),
+			"aws_account_id", readStrPointer(finalConfigData.AwsAccountId),
+			"aws_role_name", readStrPointer(finalConfigData.AwsRoleName),
+			"repo_name", readStrPointer(finalConfigData.RepoName),
+			"repo_tag", readStrPointer(finalConfigData.RepoTag),
+		)
 	}
 
 	return nil
@@ -239,66 +250,20 @@ func (c *config) setupECRClient(repo repoConfig) error {
 	return nil
 }
 
-func (c *config) displayConfig() {
-	for key, childRepoConf := range c.repos {
-		fmt.Printf("> Displaying %s\n", key)
-
-		if childRepoConf.Region != nil {
-			fmt.Printf("Region: %s\n", *childRepoConf.Region)
-		}
-
-		if childRepoConf.AwsAccountId != nil {
-			fmt.Printf("AWS Account ID: %s\n", *childRepoConf.AwsAccountId)
-		}
-
-		if childRepoConf.RepoName != nil {
-			fmt.Printf("Repo name: %s\n", *childRepoConf.RepoName)
-		}
-
-		if childRepoConf.RepoTag != nil {
-			fmt.Printf("Repo tag: %s\n", *childRepoConf.RepoTag)
-		}
-
-		if childRepoConf.TargetPlatforms != nil && len(childRepoConf.TargetPlatforms) > 0 {
-			fmt.Printf("Target platforms: %s\n", childRepoConf.TargetPlatforms)
-		}
-
-		if childRepoConf.AwsRoleName != nil {
-			fmt.Printf("AWS role name: %s\n", *childRepoConf.AwsRoleName)
-		}
-
-		if childRepoConf.WorkingDirectory != "" {
-			fmt.Printf("Working directory: %s\n", childRepoConf.WorkingDirectory)
-		}
-
-		if childRepoConf.FullImageRef != "" {
-			fmt.Printf("Full image ref: %s\n", childRepoConf.FullImageRef)
-		}
-
-		if childRepoConf.AWSRoleARN != "" {
-			fmt.Printf("AWS Role ARN: %s\n", childRepoConf.AWSRoleARN)
-		}
-
-		fmt.Printf("Remote tag missing: %t\n", childRepoConf.RemoteTagMissing)
-	}
-}
-
-func (c *config) outputGitHubJSON() error {
+func (c *config) outputGitHubJSON() (string, error) {
 	missingTags := filterMissingTags(c.repos)
 
+	// No Docker images to build
 	if len(missingTags) == 0 {
-		fmt.Printf("targets=%s\n", "[]")
-		return nil
+		return "targets=[]", nil
 	}
 
 	b, err := json.Marshal(missingTags)
 	if err != nil {
-		return fmt.Errorf("marshalling JSON: %w", err)
+		return "", fmt.Errorf("marshalling JSON: %w", err)
 	}
 
-	fmt.Printf("targets=%s\n", string(b))
-
-	return nil
+	return fmt.Sprintf("targets=%s\n", string(b)), nil
 }
 
 func filterMissingTags(original map[string]repoConfig) []repoConfig {
@@ -356,4 +321,11 @@ func mergeRepoConfig(defaultConf, childRepoConf repoConfig) repoConfig {
 	}
 
 	return finalConf
+}
+
+func readStrPointer(ptr *string) string {
+	if ptr != nil {
+		return *ptr
+	}
+	return ""
 }

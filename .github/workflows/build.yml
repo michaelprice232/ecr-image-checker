@@ -44,11 +44,14 @@ jobs:
 
       - name: Build target JSON
         id: build
-        run: ./ecr-image-checker --image-directory="images" run >> "$GITHUB_OUTPUT"
+        env:
+          IMAGE_DIRECTORY: images
+        run: ./ecr-image-checker run >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target
     needs: generate
+    if: needs.generate.outputs.targets != '[]' && needs.generate.outputs.targets != ''
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

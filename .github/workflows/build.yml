@@ -63,7 +63,6 @@ jobs:
         run: |
           echo "aws_account_id=${{ matrix.target.aws_account_id }}"
           echo "aws_region=${{ matrix.target.aws_region }}"
-          echo "repo_name=${{ matrix.target.repo_name }}"
           echo "aws_role_arn=${{ matrix.target.aws_role_arn }}"
           echo "full_image_ref=${{ matrix.target.full_image_ref }}"
           echo "target_platforms=${{ matrix.target.target_platforms }}"

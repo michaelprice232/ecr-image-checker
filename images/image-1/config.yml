@@ -6,14 +6,14 @@ target_platforms:
 
 # If NO targets is specified, use the defaults. Useful for single account/region deployment
 # If PART of the targets are missing, complete using the defaults
-targets:
-  # Inherits default region and role
-  - aws_account_id: 077439031059  # staging
-
-  # Explicit
-  - aws_account_id: 637423413210    # bcp-test
-    aws_region: ap-northeast-1      # Japan
-    aws_role_name: mike-ecr-query
+#targets:
+#  # Inherits default region and role
+#  - aws_account_id: 077439031059  # staging
+#
+#  # Explicit
+#  - aws_account_id: 637423413210    # bcp-test
+#    aws_region: ap-northeast-1      # Japan
+#    aws_role_name: mike-ecr-query
 
 
 

@@ -49,6 +49,7 @@ jobs:
   run_for_each_target:
     name: Run per target
     needs: generate
+    if: needs.generate.outputs.targets != '[]' && needs.generate.outputs.targets != ''
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

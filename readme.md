@@ -5,19 +5,15 @@
 Build an app which parses the local repo for Docker config, checks whether the remote Docker tags exist in AWS ECR 
 and outputs GitHub Action JSON config for any that are missing so that they can be built.
 
-Steps:
+Todo:
 
-- Setup sample GHA pipeline to validate JSON structure
-- Configure sample file structure locally
-- Add a configurable slog logger. Set default to ERROR
-- Parse the command line parameters. Initially just "run" for the normal workflow and "lint" for the config linter
-- Create a struct object which will contain the AWS clients
-- Parse top level YAML file which contains defaults and build map
-- Parse all root directories and YAML files and build struct field. Merge over the top level defaults map
-- Add 2 clients to the struct. Use interfaces to allow for testing
-- Use AWS client to get AWS session and ECR auth token. This is per account and region so will need to store multiple
-- Iterate through and check if the target Docker tag is present. Store any missing ones
-- Build JSON output string which will be passed as an output to the GHA job 
+- Pass result back from console write to allow unit tests
+- Fix pipeline failing when there are no changes
+- Test cross account assume roles
+- Move existing parameter to envar
+- What to do with the display results function?
+- Add support for adding datetime suffix to Docker tag
+- Update YAMl schema to support multiple accounts and regions
 
 
 Notes:

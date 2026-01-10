@@ -10,7 +10,7 @@ permissions:
 env:
   BASE_AWS_ACCOUNT: "077439031059"
   BASE_REGION: "eu-west-1"
-  BASE_IAM_ROLE_NAME: "mike-github-test"  # oidc role
+  BASE_IAM_ROLE_NAME: "mike-github-test"  # GitHub OIDC role
 
 jobs:
   generate:

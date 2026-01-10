@@ -7,11 +7,6 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  BASE_AWS_ACCOUNT: "077439031059"
-  BASE_REGION: "eu-west-1"
-  BASE_IAM_ROLE_NAME: "mike-github-test"  # oidc role
-
 jobs:
   generate:
     name: Generate target matrix
@@ -23,10 +18,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
-          aws-region: ${{ env.BASE_REGION }}
+          role-to-assume: "arn:aws:iam::${{ vars.BASE_AWS_ACCOUNT }}:role/${{ vars.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ vars.BASE_REGION }}
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -74,8 +69,8 @@ jobs:
       - name: Configure Base AWS credentials using OIDC
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
-          aws-region: ${{ env.BASE_REGION }}
+          role-to-assume: "arn:aws:iam::${{ vars.BASE_AWS_ACCOUNT }}:role/${{ vars.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ vars.BASE_REGION }}
 
       # Only required if the ECR repos are in different accounts and there are no resource level policies in place
       - name: Configure AWS credentials via assume role

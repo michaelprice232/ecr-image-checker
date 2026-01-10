@@ -1,0 +1,69 @@
+name: Deploy ECR images
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  generate:
+    name: Generate target matrix
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.build.outputs.targets }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ env.BASE_REGION }}
+
+      - name: Build target JSON
+        id: build
+        env:
+          IMAGE_DIRECTORY: images
+        run: |
+          # todo: download binary from GH releases
+          ./ecr-image-checker run >> "$GITHUB_OUTPUT"
+
+  run_for_each_target:
+    name: Run per target
+    needs: generate
+    if: needs.generate.outputs.targets != '[]' && needs.generate.outputs.targets != ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.generate.outputs.targets) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure Base AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ matrix.target.aws_region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registries: "${{ matrix.target.aws_account_id }}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push Docker image
+        run: docker buildx build --push --platform ${{ matrix.target.target_platforms }} -t "${{ matrix.target.full_image_ref }}" ${{ matrix.target.working_directory }}

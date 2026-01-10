@@ -13,4 +13,4 @@ targets:
 #  # Explicit
   - aws_account_id: 637423413210    # bcp-test
     aws_region: ap-northeast-1      # Tokyo Japan
-#    aws_role_name: mike-ecr-query
+    aws_role_name: mike-ecr-query

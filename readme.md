@@ -10,7 +10,10 @@ Supports building the same image across multiple AWS accounts and regions as wel
 
 Todo:
 
-- Add linter functionality
+- Test with no IAM role using local account
+- Test with no IAM role cross account with repo resource policy
+- Test missing YAML files -> validate
+- Add validate functionality
 - Add unit tests
 - Make repo public and build with go-releaser so we can consume the binaries in other pipelines
 

@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowCrossAccountPush",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::077439031059:root"
+      },
+      "Action": [
+        "ecr:ListImages",
+        "ecr:UploadLayerPart",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:CompleteLayerUpload",
+        "ecr:BatchGetImage",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer"
+      ]
+    }
+  ]
+}

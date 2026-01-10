@@ -204,6 +204,12 @@ func (c *config) checkECRImageTags() error {
 					listImagesInput.NextToken = aws.String(nextToken)
 				}
 
+				// If not using an IAM assume role we need to set which remote ECR registry to query
+				if target.AWSRoleARN == "" {
+					slog.Debug("No assume role so setting list images target registry", "registry", *target.AwsAccountId)
+					listImagesInput.RegistryId = target.AwsAccountId
+				}
+
 				ecrImages, err = c.ecrClient.ListImages(context.Background(), listImagesInput)
 				if err != nil {
 					return fmt.Errorf("listing Docker tags for %s: %w", *repo.RepoName, err)

@@ -10,10 +10,6 @@ Supports building the same image across multiple AWS accounts and regions as wel
 
 Todo:
 
-- Test with no IAM role using local account
-- Test with no IAM role cross account with repo resource policy
-- Test missing YAML files -> validate
-- Add validate functionality
 - Add unit tests
 - Make repo public and build with go-releaser so we can consume the binaries in other pipelines
 
@@ -21,8 +17,5 @@ Todo:
 
 ```shell
 # Log level defaults to error. Image directory defaults to the current working directory
-IMAGE_DIRECTORY=images LOG_LEVEL=info go run main.go run
-
-# Validate the repo config structure
-IMAGE_DIRECTORY=images LOG_LEVEL=info go run main.go lint
+IMAGE_DIRECTORY=images LOG_LEVEL=info go run ecr-image-checker.go
 ```

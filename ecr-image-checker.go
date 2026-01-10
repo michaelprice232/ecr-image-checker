@@ -21,24 +21,8 @@ func main() {
 		imageDirectory = "."
 	}
 
-	if len(os.Args) != 2 {
-		slog.Error("expected only 1 command line parameter", "got", len(os.Args)-1)
-		os.Exit(1)
-	}
-
-	switch os.Args[1] {
-	case "run":
-		if err := checker.Run(imageDirectory); err != nil {
-			slog.Error("whilst running", "err", err)
-			os.Exit(1)
-		}
-	case "lint":
-		if err := checker.Lint(); err != nil {
-			slog.Error("whilst linting", "err", err)
-			os.Exit(1)
-		}
-	default:
-		slog.Error("expected either 'run' or 'lint' command line parameter", "got", os.Args[1])
+	if err := checker.Run(imageDirectory); err != nil {
+		slog.Error("whilst running", "err", err)
 		os.Exit(1)
 	}
 }

@@ -94,6 +94,10 @@ func Run(imageDirectory string) error {
 		return fmt.Errorf("parsing child YAML files under %s: %w", imageDirectory, err)
 	}
 
+	if err = c.validate(); err != nil {
+		return fmt.Errorf("validating config: %w", err)
+	}
+
 	c.addCalculatedFields()
 
 	if err = c.checkECRImageTags(); err != nil {
@@ -109,6 +113,70 @@ func Run(imageDirectory string) error {
 	fmt.Println(output)
 
 	return nil
+}
+
+func (c *config) validate() error {
+	for key, repo := range c.repos {
+		if strPtrEmpty(repo.RepoName) {
+			return fmt.Errorf("repo_name not set for %s", key)
+		}
+
+		if strPtrEmpty(repo.RepoTag) {
+			return fmt.Errorf("repo_tag not set for %s", key)
+		}
+
+		if repo.Targets == nil || len(repo.Targets) == 0 {
+			return fmt.Errorf("targets not set for %s either at the child level or via defaults", key)
+		}
+
+		if repo.TargetPlatforms == nil || len(repo.TargetPlatforms) == 0 {
+			return fmt.Errorf("target_platforms not set for %s", key)
+		}
+
+		for idx, targetPlatform := range repo.TargetPlatforms {
+			if targetPlatform == "" {
+				return fmt.Errorf("target_platforms cannot contain empty values for %s index %d", key, idx)
+			}
+		}
+
+		// Check if the account ID and region are either set at the child target level or in the defaults
+		var defaultAwsAccountIdSet bool
+		var defaultAwsRegionSet bool
+
+		if repo.DefaultAwsAccountId != nil && len(*repo.DefaultAwsAccountId) > 0 {
+			defaultAwsAccountIdSet = true
+		}
+
+		if repo.DefaultRegion != nil && len(*repo.DefaultRegion) > 0 {
+			defaultAwsRegionSet = true
+		}
+
+		for idx, target := range repo.Targets {
+			if target.AwsAccountId == nil || len(*target.AwsAccountId) == 0 {
+				if !defaultAwsAccountIdSet {
+					return fmt.Errorf("aws_account_id not set for %s target index %d", key, idx)
+				}
+			}
+		}
+
+		for idx, target := range repo.Targets {
+			if target.AwsRegion == nil || len(*target.AwsRegion) == 0 {
+				if !defaultAwsRegionSet {
+					return fmt.Errorf("aws_region not set for %s target index %d", key, idx)
+				}
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func strPtrEmpty(s *string) bool {
+	if s == nil || *s == "" {
+		return true
+	}
+	return false
 }
 
 func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoConfig) error {
@@ -258,7 +326,8 @@ func (c *config) setupECRClient(target Target, repoName string) error {
 		return fmt.Errorf("loading AWS config: %w", err)
 	}
 
-	if target.AwsRoleName != nil {
+	// The value might be empty if we want to override a role name being set at the default level
+	if target.AwsRoleName != nil && *target.AwsRoleName != "" {
 		slog.Debug("Assuming role", "role", target.AWSRoleARN, "repo", repoName)
 		creds := stscreds.NewAssumeRoleProvider(c.stsClient, target.AWSRoleARN, func(o *stscreds.AssumeRoleOptions) {
 			o.RoleSessionName = appName
@@ -325,26 +394,22 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 		if target.AwsAccountId == nil {
 			if defaultConf.DefaultAwsAccountId != nil && len(*defaultConf.DefaultAwsAccountId) > 0 {
 				target.AwsAccountId = defaultConf.DefaultAwsAccountId
-				slog.Debug("Using default config value", "repo", *childRepoConf.RepoName, "aws_account_id", *defaultConf.DefaultAwsAccountId)
-			} else {
-				return nil, fmt.Errorf("AWS account ID not set for both the child and default configs for repo: %s", *childRepoConf.RepoName)
+				slog.Debug("Using default config value", "repo", readStrPointer(childRepoConf.RepoName), "aws_account_id", readStrPointer(defaultConf.DefaultAwsAccountId))
 			}
 		}
 
 		if target.AwsRegion == nil {
 			if defaultConf.DefaultRegion != nil && len(*defaultConf.DefaultRegion) > 0 {
 				target.AwsRegion = defaultConf.DefaultRegion
-				slog.Debug("Using default config value", "repo", *childRepoConf.RepoName, "aws_region", *defaultConf.DefaultRegion)
-			} else {
-				return nil, fmt.Errorf("AWS region not set for both the child and default configs for repo: %s", *childRepoConf.RepoName)
+				slog.Debug("Using default config value", "repo", readStrPointer(childRepoConf.RepoName), "aws_region", readStrPointer(defaultConf.DefaultRegion))
 			}
 		}
 
-		// Non-mandatory
+		// Optional
 		if target.AwsRoleName == nil {
 			if defaultConf.DefaultAwsRoleName != nil && len(*defaultConf.DefaultAwsRoleName) > 0 {
 				target.AwsRoleName = defaultConf.DefaultAwsRoleName
-				slog.Debug("Using default config value", "repo", *childRepoConf.RepoName, "aws_role_name", *defaultConf.DefaultAwsRoleName)
+				slog.Debug("Using default config value", "repo", readStrPointer(childRepoConf.RepoName), "aws_role_name", readStrPointer(defaultConf.DefaultAwsRoleName))
 			}
 		}
 	}
@@ -363,7 +428,7 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 				childRepoConf.Targets[0].AwsRoleName = defaultConf.DefaultAwsRoleName
 			}
 
-			slog.Debug("Using default config value", "repo", *childRepoConf.RepoName, "target", childRepoConf.Targets)
+			slog.Debug("Using default config value", "repo", readStrPointer(childRepoConf.RepoName), "target", childRepoConf.Targets)
 		}
 	}
 

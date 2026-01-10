@@ -5,7 +5,7 @@
       "Sid": "AllowCrossAccountPush",
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::077439031059:root"
+        "AWS": "arn:aws:iam::111111111111:root"
       },
       "Action": [
         "ecr:ListImages",

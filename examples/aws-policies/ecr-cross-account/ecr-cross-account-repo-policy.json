@@ -9,13 +9,15 @@
       },
       "Action": [
         "ecr:ListImages",
-        "ecr:UploadLayerPart",
-        "ecr:PutImage",
-        "ecr:InitiateLayerUpload",
-        "ecr:CompleteLayerUpload",
+
         "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
         "ecr:BatchCheckLayerAvailability",
-        "ecr:GetDownloadUrlForLayer"
+
+        "ecr:PutImage",
+        "ecr:UploadLayerPart",
+        "ecr:InitiateLayerUpload",
+        "ecr:CompleteLayerUpload"
       ]
     }
   ]

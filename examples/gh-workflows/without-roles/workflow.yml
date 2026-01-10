@@ -1,7 +1,11 @@
-name: POC
+name: Deploy ECR images
 
 on:
-  push: {}
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
 
 permissions:
   id-token: write
@@ -10,11 +14,12 @@ permissions:
 env:
   BASE_AWS_ACCOUNT: "077439031059"
   BASE_REGION: "eu-west-1"
-  BASE_IAM_ROLE_NAME: "mike-github-test"  # oidc role
+  BASE_IAM_ROLE_NAME: "github-oidc-role"
 
 jobs:
   generate:
     name: Generate target matrix
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.build.outputs.targets }}
@@ -28,25 +33,13 @@ jobs:
           role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
           aws-region: ${{ env.BASE_REGION }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Build binary
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: 0
-        run: |
-          go build -o ecr-image-checker ecr-image-checker.go
-          chmod +x ecr-image-checker
-
       - name: Build target JSON
         id: build
         env:
           IMAGE_DIRECTORY: images
-        run: ./ecr-image-checker run >> "$GITHUB_OUTPUT"
+        run: |
+          # todo: download binary from GH releases
+          ./ecr-image-checker run >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target
@@ -59,15 +52,6 @@ jobs:
         target: ${{ fromJSON(needs.generate.outputs.targets) }}
 
     steps:
-      - name: Show target
-        run: |
-          echo "aws_account_id=${{ matrix.target.aws_account_id }}"
-          echo "aws_region=${{ matrix.target.aws_region }}"
-          echo "aws_role_arn=${{ matrix.target.aws_role_arn }}"
-          echo "full_image_ref=${{ matrix.target.full_image_ref }}"
-          echo "target_platforms=${{ matrix.target.target_platforms }}"
-          echo "working_directory=${{ matrix.target.working_directory }}"
-
       - name: Checkout code
         uses: actions/checkout@v6
 
@@ -75,19 +59,13 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: "arn:aws:iam::${{ env.BASE_AWS_ACCOUNT }}:role/${{ env.BASE_IAM_ROLE_NAME }}"
-          aws-region: ${{ env.BASE_AWS_ACCOUNT }}
-
-      # Only required if the ECR repos are in different accounts and there are no resource level policies in place
-      - name: Configure AWS credentials via assume role
-        uses: aws-actions/configure-aws-credentials@v5
-        with:
-          role-to-assume: ${{ matrix.target.aws_role_arn }}
-          role-chaining: true
           aws-region: ${{ matrix.target.aws_region }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registries: "${{ matrix.target.aws_account_id }}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

@@ -115,6 +115,84 @@ func Run(imageDirectory string) error {
 	return nil
 }
 
+func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoConfig) error {
+	var sourceConfigFilePath string
+	var finalConfigData *repoConfig
+
+	baseDirectories, err := os.ReadDir(imageDirectory)
+	if err != nil {
+		return fmt.Errorf("reading directories in %s: %w", imageDirectory, err)
+	}
+
+	for _, baseDir := range baseDirectories {
+		// Ignore plain files and hidden directories
+		if !baseDir.IsDir() || strings.HasPrefix(baseDir.Name(), ".") {
+			continue
+		}
+
+		sourceConfigFilePath = path.Join(imageDirectory, baseDir.Name(), childConfigFile)
+
+		childConfigData, err := parseYAMLFile(sourceConfigFilePath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				slog.Warn("Skipping directory as child config file doesn't exist", "path", sourceConfigFilePath)
+				continue
+			} else {
+				return fmt.Errorf("parsing YAML file (%s): %w", sourceConfigFilePath, err)
+			}
+		}
+		slog.Info("Found child config file", "path", sourceConfigFilePath)
+
+		// Merge the child config over the default config to determine the final config for this image
+		if finalConfigData, err = mergeRepoConfig(&defaultConfigData, &childConfigData); err != nil {
+			return fmt.Errorf("merging config: %w", err)
+		}
+
+		c.repos[sourceConfigFilePath] = *finalConfigData
+
+		for _, target := range finalConfigData.Targets {
+			slog.Debug("Child config",
+				"path", sourceConfigFilePath,
+				"aws_region", readStrPointer(target.AwsRegion),
+				"aws_account_id", readStrPointer(target.AwsAccountId),
+				"aws_role_name", readStrPointer(target.AwsRoleName),
+				"repo_name", readStrPointer(finalConfigData.RepoName),
+				"repo_tag", readStrPointer(finalConfigData.RepoTag),
+			)
+		}
+
+	}
+
+	return nil
+}
+
+func (c *config) setupECRClient(target Target, repoName string) error {
+	awsCfg, err := awsConfig.LoadDefaultConfig(context.Background(), func(o *awsConfig.LoadOptions) error {
+		o.Region = *target.AwsRegion
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("loading AWS config: %w", err)
+	}
+
+	// The value might be empty if we want to override a role name being set at the default level
+	if target.AwsRoleName != nil && *target.AwsRoleName != "" {
+		slog.Debug("Assuming role", "role", target.AWSRoleARN, "repo", repoName)
+		creds := stscreds.NewAssumeRoleProvider(c.stsClient, target.AWSRoleARN, func(o *stscreds.AssumeRoleOptions) {
+			o.RoleSessionName = appName
+		})
+		awsCfg.Credentials = aws.NewCredentialsCache(creds)
+		c.ecrClient = ecr.NewFromConfig(awsCfg)
+
+		return nil
+	}
+
+	slog.Debug("No assume IAM role defined. Using normal credential chain", "repo", repoName)
+	c.ecrClient = ecr.NewFromConfig(awsCfg)
+
+	return nil
+}
+
 func (c *config) validate() error {
 	for key, repo := range c.repos {
 		if strPtrEmpty(repo.RepoName) {
@@ -165,64 +243,6 @@ func (c *config) validate() error {
 					return fmt.Errorf("aws_region not set for %s target index %d", key, idx)
 				}
 			}
-		}
-
-	}
-
-	return nil
-}
-
-func strPtrEmpty(s *string) bool {
-	if s == nil || *s == "" {
-		return true
-	}
-	return false
-}
-
-func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoConfig) error {
-	var sourceConfigFilePath string
-	var finalConfigData *repoConfig
-
-	baseDirectories, err := os.ReadDir(imageDirectory)
-	if err != nil {
-		return fmt.Errorf("reading directories in %s: %w", imageDirectory, err)
-	}
-
-	for _, baseDir := range baseDirectories {
-		// Ignore plain files and hidden directories
-		if !baseDir.IsDir() || strings.HasPrefix(baseDir.Name(), ".") {
-			continue
-		}
-
-		sourceConfigFilePath = path.Join(imageDirectory, baseDir.Name(), childConfigFile)
-
-		childConfigData, err := parseYAMLFile(sourceConfigFilePath)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				slog.Warn("Skipping directory as child config file doesn't exist", "path", sourceConfigFilePath)
-				continue
-			} else {
-				return fmt.Errorf("parsing YAML file (%s): %w", sourceConfigFilePath, err)
-			}
-		}
-		slog.Info("Found child config file", "path", sourceConfigFilePath)
-
-		// Merge the child config over the default config to determine the final config for this image
-		if finalConfigData, err = mergeRepoConfig(&defaultConfigData, &childConfigData); err != nil {
-			return fmt.Errorf("merging config: %w", err)
-		}
-
-		c.repos[sourceConfigFilePath] = *finalConfigData
-
-		for _, target := range finalConfigData.Targets {
-			slog.Debug("Child config",
-				"path", sourceConfigFilePath,
-				"aws_region", readStrPointer(target.AwsRegion),
-				"aws_account_id", readStrPointer(target.AwsAccountId),
-				"aws_role_name", readStrPointer(target.AwsRoleName),
-				"repo_name", readStrPointer(finalConfigData.RepoName),
-				"repo_tag", readStrPointer(finalConfigData.RepoTag),
-			)
 		}
 
 	}
@@ -317,33 +337,6 @@ func (c *config) checkECRImageTags() error {
 	return nil
 }
 
-func (c *config) setupECRClient(target Target, repoName string) error {
-	awsCfg, err := awsConfig.LoadDefaultConfig(context.Background(), func(o *awsConfig.LoadOptions) error {
-		o.Region = *target.AwsRegion
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("loading AWS config: %w", err)
-	}
-
-	// The value might be empty if we want to override a role name being set at the default level
-	if target.AwsRoleName != nil && *target.AwsRoleName != "" {
-		slog.Debug("Assuming role", "role", target.AWSRoleARN, "repo", repoName)
-		creds := stscreds.NewAssumeRoleProvider(c.stsClient, target.AWSRoleARN, func(o *stscreds.AssumeRoleOptions) {
-			o.RoleSessionName = appName
-		})
-		awsCfg.Credentials = aws.NewCredentialsCache(creds)
-		c.ecrClient = ecr.NewFromConfig(awsCfg)
-
-		return nil
-	}
-
-	slog.Debug("No assume IAM role defined. Using normal credential chain", "repo", repoName)
-	c.ecrClient = ecr.NewFromConfig(awsCfg)
-
-	return nil
-}
-
 func (c *config) outputGitHubJSON() (string, error) {
 	missingTags := filterMissingTags(c.repos)
 
@@ -358,20 +351,6 @@ func (c *config) outputGitHubJSON() (string, error) {
 	}
 
 	return fmt.Sprintf("targets=%s\n", string(b)), nil
-}
-
-func filterMissingTags(original map[string]repoConfig) []Target {
-	missingTags := make([]Target, 0)
-
-	for _, repo := range original {
-		for _, target := range repo.Targets {
-			if target.RemoteTagMissing {
-				missingTags = append(missingTags, *target)
-			}
-		}
-	}
-
-	return missingTags
 }
 
 func parseYAMLFile(path string) (repoConfig, error) {
@@ -435,9 +414,30 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 	return childRepoConf, nil
 }
 
+func filterMissingTags(original map[string]repoConfig) []Target {
+	missingTags := make([]Target, 0)
+
+	for _, repo := range original {
+		for _, target := range repo.Targets {
+			if target.RemoteTagMissing {
+				missingTags = append(missingTags, *target)
+			}
+		}
+	}
+
+	return missingTags
+}
+
 func readStrPointer(ptr *string) string {
 	if ptr != nil {
 		return *ptr
 	}
 	return ""
+}
+
+func strPtrEmpty(s *string) bool {
+	if s == nil || *s == "" {
+		return true
+	}
+	return false
 }

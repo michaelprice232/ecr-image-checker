@@ -169,6 +169,22 @@ func Test_validate(t *testing.T) {
 			},
 			expectError: true,
 		},
+		{
+			testName: "AWS account ID not set either explicitly or via default",
+			keyName:  "image-1/config.yml",
+			conf: repoConfig{
+				DefaultRegion:   aws.String(awsRegion),
+				RepoName:        aws.String(repoName),
+				RepoTag:         aws.String(tagName),
+				TargetPlatforms: targetPlatforms,
+				Targets: []*Target{
+					{
+						AwsRegion: aws.String(awsRegion),
+					},
+				},
+			},
+			expectError: true,
+		},
 	}
 
 	for _, tc := range cases {
@@ -189,4 +205,30 @@ func Test_validate(t *testing.T) {
 		})
 	}
 
+}
+
+func Test_strPtrEmpty(t *testing.T) {
+	s := "non-empty-string"
+	result := strPtrEmpty(&s)
+	require.False(t, result)
+
+	s = ""
+	result = strPtrEmpty(&s)
+	require.True(t, result)
+
+	result = strPtrEmpty(nil)
+	require.True(t, result)
+}
+
+func Test_readStrPointer(t *testing.T) {
+	s := "non-empty-string"
+	result := readStrPointer(&s)
+	require.Equal(t, s, result)
+
+	s = ""
+	result = readStrPointer(&s)
+	require.Zero(t, s)
+
+	result = readStrPointer(nil)
+	require.Zero(t, s)
 }

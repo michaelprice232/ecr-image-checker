@@ -115,70 +115,6 @@ func Run(imageDirectory string) error {
 	return nil
 }
 
-func (c *config) validate() error {
-	for key, repo := range c.repos {
-		if strPtrEmpty(repo.RepoName) {
-			return fmt.Errorf("repo_name not set for %s", key)
-		}
-
-		if strPtrEmpty(repo.RepoTag) {
-			return fmt.Errorf("repo_tag not set for %s", key)
-		}
-
-		if repo.Targets == nil || len(repo.Targets) == 0 {
-			return fmt.Errorf("targets not set for %s either at the child level or via defaults", key)
-		}
-
-		if repo.TargetPlatforms == nil || len(repo.TargetPlatforms) == 0 {
-			return fmt.Errorf("target_platforms not set for %s", key)
-		}
-
-		for idx, targetPlatform := range repo.TargetPlatforms {
-			if targetPlatform == "" {
-				return fmt.Errorf("target_platforms cannot contain empty values for %s index %d", key, idx)
-			}
-		}
-
-		// Check if the account ID and region are either set at the child target level or in the defaults
-		var defaultAwsAccountIdSet bool
-		var defaultAwsRegionSet bool
-
-		if repo.DefaultAwsAccountId != nil && len(*repo.DefaultAwsAccountId) > 0 {
-			defaultAwsAccountIdSet = true
-		}
-
-		if repo.DefaultRegion != nil && len(*repo.DefaultRegion) > 0 {
-			defaultAwsRegionSet = true
-		}
-
-		for idx, target := range repo.Targets {
-			if target.AwsAccountId == nil || len(*target.AwsAccountId) == 0 {
-				if !defaultAwsAccountIdSet {
-					return fmt.Errorf("aws_account_id not set for %s target index %d", key, idx)
-				}
-			}
-		}
-
-		for idx, target := range repo.Targets {
-			if target.AwsRegion == nil || len(*target.AwsRegion) == 0 {
-				if !defaultAwsRegionSet {
-					return fmt.Errorf("aws_region not set for %s target index %d", key, idx)
-				}
-			}
-		}
-
-	}
-
-	return nil
-}
-
-func strPtrEmpty(s *string) bool {
-	if s == nil || *s == "" {
-		return true
-	}
-	return false
-}
-
 func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoConfig) error {
 	var sourceConfigFilePath string
 	var finalConfigData *repoConfig
@@ -225,6 +161,87 @@ func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoC
 			)
 		}
 
+	}
+
+	return nil
+}
+
+func (c *config) setupECRClient(target Target, repoName string) error {
+	awsCfg, err := awsConfig.LoadDefaultConfig(context.Background(), func(o *awsConfig.LoadOptions) error {
+		o.Region = *target.AwsRegion
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("loading AWS config: %w", err)
+	}
+
+	// The value might be empty if we want to override a role name being set at the default level
+	if target.AwsRoleName != nil && *target.AwsRoleName != "" {
+		slog.Debug("Assuming role", "role", target.AWSRoleARN, "repo", repoName)
+		creds := stscreds.NewAssumeRoleProvider(c.stsClient, target.AWSRoleARN, func(o *stscreds.AssumeRoleOptions) {
+			o.RoleSessionName = appName
+		})
+		awsCfg.Credentials = aws.NewCredentialsCache(creds)
+		c.ecrClient = ecr.NewFromConfig(awsCfg)
+
+		return nil
+	}
+
+	slog.Debug("No assume IAM role defined. Using normal credential chain", "repo", repoName)
+	c.ecrClient = ecr.NewFromConfig(awsCfg)
+
+	return nil
+}
+
+func (c *config) validate() error {
+	for key, repo := range c.repos {
+		if strPtrEmpty(repo.RepoName) {
+			return fmt.Errorf("repo_name not set for %s", key)
+		}
+
+		if strPtrEmpty(repo.RepoTag) {
+			return fmt.Errorf("repo_tag not set for %s", key)
+		}
+
+		if repo.Targets == nil || len(repo.Targets) == 0 {
+			return fmt.Errorf("targets not set for %s either at the child level or via defaults", key)
+		}
+
+		if repo.TargetPlatforms == nil || len(repo.TargetPlatforms) == 0 {
+			return fmt.Errorf("target_platforms not set for %s", key)
+		}
+
+		for idx, targetPlatform := range repo.TargetPlatforms {
+			if targetPlatform == "" {
+				return fmt.Errorf("target_platforms cannot contain empty values for %s index %d", key, idx)
+			}
+		}
+
+		// Check if the account ID and region are either set at the child target level or in the defaults
+		var defaultAwsAccountIdSet bool
+		var defaultAwsRegionSet bool
+
+		if repo.DefaultAwsAccountId != nil && len(*repo.DefaultAwsAccountId) > 0 {
+			defaultAwsAccountIdSet = true
+		}
+
+		if repo.DefaultRegion != nil && len(*repo.DefaultRegion) > 0 {
+			defaultAwsRegionSet = true
+		}
+
+		for idx, target := range repo.Targets {
+			if target.AwsAccountId == nil || len(*target.AwsAccountId) == 0 {
+				if !defaultAwsAccountIdSet {
+					return fmt.Errorf("aws_account_id not set for %s target index %d and there is no default set", key, idx)
+				}
+			}
+
+			if target.AwsRegion == nil || len(*target.AwsRegion) == 0 {
+				if !defaultAwsRegionSet {
+					return fmt.Errorf("aws_region not set for %s target index %d and there is no default set", key, idx)
+				}
+			}
+		}
 	}
 
 	return nil
@@ -317,33 +334,6 @@ func (c *config) checkECRImageTags() error {
 	return nil
 }
 
-func (c *config) setupECRClient(target Target, repoName string) error {
-	awsCfg, err := awsConfig.LoadDefaultConfig(context.Background(), func(o *awsConfig.LoadOptions) error {
-		o.Region = *target.AwsRegion
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("loading AWS config: %w", err)
-	}
-
-	// The value might be empty if we want to override a role name being set at the default level
-	if target.AwsRoleName != nil && *target.AwsRoleName != "" {
-		slog.Debug("Assuming role", "role", target.AWSRoleARN, "repo", repoName)
-		creds := stscreds.NewAssumeRoleProvider(c.stsClient, target.AWSRoleARN, func(o *stscreds.AssumeRoleOptions) {
-			o.RoleSessionName = appName
-		})
-		awsCfg.Credentials = aws.NewCredentialsCache(creds)
-		c.ecrClient = ecr.NewFromConfig(awsCfg)
-
-		return nil
-	}
-
-	slog.Debug("No assume IAM role defined. Using normal credential chain", "repo", repoName)
-	c.ecrClient = ecr.NewFromConfig(awsCfg)
-
-	return nil
-}
-
 func (c *config) outputGitHubJSON() (string, error) {
 	missingTags := filterMissingTags(c.repos)
 
@@ -358,20 +348,6 @@ func (c *config) outputGitHubJSON() (string, error) {
 	}
 
 	return fmt.Sprintf("targets=%s\n", string(b)), nil
-}
-
-func filterMissingTags(original map[string]repoConfig) []Target {
-	missingTags := make([]Target, 0)
-
-	for _, repo := range original {
-		for _, target := range repo.Targets {
-			if target.RemoteTagMissing {
-				missingTags = append(missingTags, *target)
-			}
-		}
-	}
-
-	return missingTags
 }
 
 func parseYAMLFile(path string) (repoConfig, error) {
@@ -415,7 +391,7 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 	}
 
 	// No targets key entirely. Fall back to defaults
-	if childRepoConf.Targets == nil || (childRepoConf.Targets != nil && len(childRepoConf.Targets) == 0) {
+	if childRepoConf.Targets == nil || len(childRepoConf.Targets) == 0 {
 		if defaultConf.DefaultAwsAccountId != nil && defaultConf.DefaultRegion != nil {
 			childRepoConf.Targets = []*Target{
 				{
@@ -435,9 +411,30 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 	return childRepoConf, nil
 }
 
+func filterMissingTags(original map[string]repoConfig) []Target {
+	missingTags := make([]Target, 0)
+
+	for _, repo := range original {
+		for _, target := range repo.Targets {
+			if target.RemoteTagMissing {
+				missingTags = append(missingTags, *target)
+			}
+		}
+	}
+
+	return missingTags
+}
+
 func readStrPointer(ptr *string) string {
 	if ptr != nil {
 		return *ptr
 	}
 	return ""
+}
+
+func strPtrEmpty(s *string) bool {
+	if s == nil || *s == "" {
+		return true
+	}
+	return false
 }

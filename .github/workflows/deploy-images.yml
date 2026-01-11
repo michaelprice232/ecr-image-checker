@@ -1,7 +1,11 @@
-name: POC
+name: Deploy images
 
 on:
-  push: {}
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
 
 permissions:
   id-token: write
@@ -10,6 +14,7 @@ permissions:
 jobs:
   generate:
     name: Generate target matrix
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     outputs:
       targets: ${{ steps.build.outputs.targets }}

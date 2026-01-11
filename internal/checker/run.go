@@ -232,19 +232,16 @@ func (c *config) validate() error {
 		for idx, target := range repo.Targets {
 			if target.AwsAccountId == nil || len(*target.AwsAccountId) == 0 {
 				if !defaultAwsAccountIdSet {
-					return fmt.Errorf("aws_account_id not set for %s target index %d", key, idx)
+					return fmt.Errorf("aws_account_id not set for %s target index %d and there is no default set", key, idx)
 				}
 			}
-		}
 
-		for idx, target := range repo.Targets {
 			if target.AwsRegion == nil || len(*target.AwsRegion) == 0 {
 				if !defaultAwsRegionSet {
-					return fmt.Errorf("aws_region not set for %s target index %d", key, idx)
+					return fmt.Errorf("aws_region not set for %s target index %d and there is no default set", key, idx)
 				}
 			}
 		}
-
 	}
 
 	return nil
@@ -394,7 +391,7 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 	}
 
 	// No targets key entirely. Fall back to defaults
-	if childRepoConf.Targets == nil || (childRepoConf.Targets != nil && len(childRepoConf.Targets) == 0) {
+	if childRepoConf.Targets == nil || len(childRepoConf.Targets) == 0 {
 		if defaultConf.DefaultAwsAccountId != nil && defaultConf.DefaultRegion != nil {
 			childRepoConf.Targets = []*Target{
 				{

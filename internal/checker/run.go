@@ -219,6 +219,16 @@ func (c *config) validate() error {
 			}
 		}
 
+		if repo.BuildArgs != nil && len(repo.BuildArgs) == 0 {
+			return fmt.Errorf("build_args must have at one key/pair when defined for %s", key)
+		}
+
+		for k, arg := range repo.BuildArgs {
+			if strings.TrimSpace(arg) == "" {
+				return fmt.Errorf("build_args must have no empty values for %s key %s", key, k)
+			}
+		}
+
 		// Check if the account ID and region are either set at the child target level or in the defaults
 		var defaultAwsAccountIdSet bool
 		var defaultAwsRegionSet bool

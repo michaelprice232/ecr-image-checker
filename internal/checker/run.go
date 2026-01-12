@@ -148,9 +148,7 @@ func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoC
 		slog.Info("Found child config file", "path", sourceConfigFilePath)
 
 		// Merge the child config over the default config to determine the final config for this image
-		if finalConfigData, err = mergeRepoConfig(&defaultConfigData, &childConfigData); err != nil {
-			return fmt.Errorf("merging config: %w", err)
-		}
+		finalConfigData = mergeRepoConfig(&defaultConfigData, &childConfigData)
 
 		c.repos[sourceConfigFilePath] = *finalConfigData
 
@@ -389,7 +387,7 @@ func parseYAMLFile(path string) (repoConfig, error) {
 	return configData, nil
 }
 
-func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error) {
+func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) *repoConfig {
 	for _, target := range childRepoConf.Targets {
 		if target.AwsAccountId == nil {
 			if defaultConf.DefaultAwsAccountId != nil && len(*defaultConf.DefaultAwsAccountId) > 0 {
@@ -405,7 +403,6 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 			}
 		}
 
-		// Optional
 		if target.AwsRoleName == nil {
 			if defaultConf.DefaultAwsRoleName != nil && len(*defaultConf.DefaultAwsRoleName) > 0 {
 				target.AwsRoleName = defaultConf.DefaultAwsRoleName
@@ -414,7 +411,7 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 		}
 	}
 
-	// No targets key entirely. Fall back to defaults
+	// No targets key entirely -> fall back to defaults if available
 	if childRepoConf.Targets == nil || len(childRepoConf.Targets) == 0 {
 		if defaultConf.DefaultAwsAccountId != nil && defaultConf.DefaultRegion != nil {
 			childRepoConf.Targets = []*Target{
@@ -428,11 +425,11 @@ func mergeRepoConfig(defaultConf, childRepoConf *repoConfig) (*repoConfig, error
 				childRepoConf.Targets[0].AwsRoleName = defaultConf.DefaultAwsRoleName
 			}
 
-			slog.Debug("Using default config value", "repo", readStrPointer(childRepoConf.RepoName), "target", childRepoConf.Targets)
+			slog.Debug("Using default config value", "repo", readStrPointer(childRepoConf.RepoName), "targets", childRepoConf.Targets)
 		}
 	}
 
-	return childRepoConf, nil
+	return childRepoConf
 }
 
 func filterMissingTags(original map[string]repoConfig) []Target {

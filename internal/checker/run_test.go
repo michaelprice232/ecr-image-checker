@@ -2,6 +2,7 @@ package checker
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -439,4 +440,118 @@ func Test_parseYAMLFile(t *testing.T) {
 
 	_, err = parseYAMLFile("invalid-path.yml")
 	require.Error(t, err)
+}
+
+func Test_mergeRepoConfig(t *testing.T) {
+	awsAccountID := "111111111111"
+	awsRegion := "eu-west-1"
+	awsRole := "my-iam-role"
+	repoName := "repo-1"
+	tagName := "alpine"
+	targetPlatforms := []string{"linux/arm64", "linux/amd64"}
+	buildArgs := map[string]string{"key": "value"}
+
+	cases := []struct {
+		testName    string
+		defaultConf *repoConfig
+		childConf   *repoConfig
+	}{
+		{
+			testName: "Use default AWS account ID",
+			defaultConf: &repoConfig{
+				DefaultAwsAccountId: aws.String(awsAccountID),
+				DefaultRegion:       aws.String(awsRegion),
+				DefaultAwsRoleName:  aws.String(awsRole),
+			},
+			childConf: &repoConfig{
+				RepoName:        aws.String(repoName),
+				RepoTag:         aws.String(tagName),
+				TargetPlatforms: targetPlatforms,
+				BuildArgs:       buildArgs,
+				Targets: []*Target{
+					{
+						AwsRegion:   aws.String(awsRegion),
+						AwsRoleName: aws.String(awsRole),
+					},
+				},
+			},
+		},
+		{
+			testName: "Use default AWS region and IAM role",
+			defaultConf: &repoConfig{
+				DefaultAwsAccountId: aws.String(awsAccountID),
+				DefaultRegion:       aws.String(awsRegion),
+				DefaultAwsRoleName:  aws.String(awsRole),
+			},
+			childConf: &repoConfig{
+				RepoName:        aws.String(repoName),
+				RepoTag:         aws.String(tagName),
+				TargetPlatforms: targetPlatforms,
+				BuildArgs:       buildArgs,
+				Targets: []*Target{
+					{
+						AwsAccountId: aws.String(awsAccountID),
+					},
+				},
+			},
+		},
+		{
+			testName: "Missing targets key use defaults",
+			defaultConf: &repoConfig{
+				DefaultAwsAccountId: aws.String(awsAccountID),
+				DefaultRegion:       aws.String(awsRegion),
+				DefaultAwsRoleName:  aws.String(awsRole),
+			},
+			childConf: &repoConfig{
+				RepoName:        aws.String(repoName),
+				RepoTag:         aws.String(tagName),
+				TargetPlatforms: targetPlatforms,
+				BuildArgs:       buildArgs,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+
+			result := mergeRepoConfig(tc.defaultConf, tc.childConf)
+
+			require.NotNil(t, result.Targets[0].AwsAccountId)
+			require.Equal(t, awsAccountID, *result.Targets[0].AwsAccountId)
+
+			require.NotNil(t, result.Targets[0].AwsRegion)
+			require.Equal(t, awsRegion, *result.Targets[0].AwsRegion)
+
+			if tc.defaultConf.DefaultAwsRoleName != nil || tc.childConf.Targets[0].AwsRoleName != nil {
+				require.Equal(t, awsRole, *tc.childConf.Targets[0].AwsRoleName)
+			}
+
+			if tc.childConf.Targets == nil || len(tc.childConf.Targets) == 0 {
+				if tc.defaultConf.DefaultAwsAccountId != nil && tc.defaultConf.DefaultRegion != nil {
+					require.Equal(t, awsAccountID, *result.Targets[0].AwsAccountId)
+					require.Equal(t, awsRegion, *result.Targets[0].AwsRegion)
+				}
+			}
+		})
+	}
+
+}
+
+func Test_parseChildConfig(t *testing.T) {
+	imageDir := "testdata/image-dir"
+	childConfigOneKey := fmt.Sprintf("%s/image-1/%s", imageDir, childConfigFile)
+	childConfigTwoKey := fmt.Sprintf("%s/image-2/%s", imageDir, childConfigFile)
+	c := config{repos: make(map[string]repoConfig)}
+	fullDefaultData := repoConfig{
+		DefaultAwsAccountId: aws.String("111111111111"),
+		DefaultRegion:       aws.String("eu-west-3"),
+		DefaultAwsRoleName:  aws.String("my-iam-role"),
+	}
+
+	err := c.parseChildConfig(imageDir, fullDefaultData)
+	require.NoError(t, err)
+	require.Len(t, c.repos, 2)
+	require.Len(t, c.repos[childConfigOneKey].Targets, 2)
+	require.Len(t, c.repos[childConfigTwoKey].Targets, 1, "targets should be auto populated from defaults")
 }

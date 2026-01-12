@@ -1,0 +1,14 @@
+repo_name: mike-test-1
+repo_tag: alpine-3
+target_platforms:
+  - "linux/arm64"
+  - "linux/amd64"
+
+targets:
+  # Inherits default region and role
+  - aws_account_id: 111111111111
+
+  #  # Explicit
+  - aws_account_id: 222222222222
+    aws_region: ap-northeast-1  # Tokyo Japan
+    aws_role_name: mike-ecr-query

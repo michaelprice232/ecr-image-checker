@@ -543,6 +543,7 @@ func Test_mergeRepoConfig(t *testing.T) {
 
 func Test_parseChildConfig(t *testing.T) {
 	imageDir := "testdata/image-dir"
+	badImageDir := "testdata/bad-image-dir"
 	childConfigOneKey := fmt.Sprintf("%s/image-1/%s", imageDir, childConfigFile)
 	childConfigTwoKey := fmt.Sprintf("%s/image-2/%s", imageDir, childConfigFile)
 	c := config{repos: make(map[string]repoConfig)}
@@ -557,6 +558,9 @@ func Test_parseChildConfig(t *testing.T) {
 	require.Len(t, c.repos, 2)
 	require.Len(t, c.repos[childConfigOneKey].Targets, 2)
 	require.Len(t, c.repos[childConfigTwoKey].Targets, 1, "targets should be auto populated from defaults")
+
+	err = c.parseChildConfig(badImageDir, fullDefaultData)
+	require.Error(t, err)
 }
 
 type mockECRClient struct{}

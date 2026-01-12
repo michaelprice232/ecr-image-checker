@@ -153,6 +153,14 @@ func (c *config) parseChildConfig(imageDirectory string, defaultConfigData repoC
 				return fmt.Errorf("parsing YAML file (%s): %w", sourceConfigFilePath, err)
 			}
 		}
+
+		// Check that a Dockerfile exists alongside the config file as the pipeline expects one
+		dockerfilePath := path.Join(imageDirectory, baseDir.Name(), "Dockerfile")
+		_, err = os.ReadFile(dockerfilePath)
+		if err != nil && errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("unable to find Dockerfile %s alongside child config file %s", dockerfilePath, sourceConfigFilePath)
+		}
+
 		slog.Info("Found child config file", "path", sourceConfigFilePath)
 
 		// Merge the child config over the default config to determine the final config for this image

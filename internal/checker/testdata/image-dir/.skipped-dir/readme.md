@@ -1,0 +1,1 @@
+Hidden directories should be skipped

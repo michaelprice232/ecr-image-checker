@@ -1,0 +1,8 @@
+repo_name: mike-test-2
+repo_tag: 4
+target_platforms:
+  - "linux/arm64"
+
+build_args:
+  BASE_IMAGE_TAG: "4"
+  DUMMY_KEY: "test"

@@ -34,7 +34,7 @@ jobs:
           IMAGE_DIRECTORY: images
         run: |
           # todo: download binary from GH releases
-          ./ecr-image-checker run >> "$GITHUB_OUTPUT"
+          ./ecr-image-checker >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target

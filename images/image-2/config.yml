@@ -2,3 +2,7 @@ repo_name: mike-test-2
 repo_tag: alpine-3
 target_platforms:
   - "linux/arm64"
+
+build_args:
+  BASE_IMAGE_TAG: "3"
+  DUMMY_KEY: "test"

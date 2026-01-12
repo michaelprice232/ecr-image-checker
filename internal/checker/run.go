@@ -36,6 +36,7 @@ type Target struct {
 	RemoteTagMissing  bool   `json:"remote_tag_missing"`
 	WorkingDirectory  string `json:"working_directory"`
 	TargetPlatformStr string `json:"target_platforms"`
+	BuildArgsStr      string `json:"build_args"`
 }
 
 type repoConfig struct {
@@ -44,10 +45,11 @@ type repoConfig struct {
 	DefaultRegion       *string `yaml:"default_aws_region" json:"default_aws_region"`
 	DefaultAwsRoleName  *string `yaml:"default_aws_role_name" json:"default_aws_role_name"`
 
-	RepoName        *string   `yaml:"repo_name" json:"repo_name"`
-	RepoTag         *string   `yaml:"repo_tag" json:"repo_tag"`
-	TargetPlatforms []string  `yaml:"target_platforms" json:"target_platforms_slice"`
-	Targets         []*Target `yaml:"targets" json:"targets"`
+	RepoName        *string           `yaml:"repo_name" json:"repo_name"`
+	RepoTag         *string           `yaml:"repo_tag" json:"repo_tag"`
+	TargetPlatforms []string          `yaml:"target_platforms" json:"target_platforms_slice"`
+	BuildArgs       map[string]string `yaml:"build_args" json:"build_args_map"`
+	Targets         []*Target         `yaml:"targets" json:"targets"`
 }
 
 type config struct {
@@ -261,8 +263,20 @@ func (c *config) addCalculatedFields() {
 			if repo.TargetPlatforms != nil && len(repo.TargetPlatforms) > 0 {
 				target.TargetPlatformStr = strings.Join(repo.TargetPlatforms, ",")
 			}
-		}
 
+			if len(repo.BuildArgs) > 0 {
+				count := 0
+				for k, arg := range repo.BuildArgs {
+					if count > 0 {
+						target.BuildArgsStr += " "
+					}
+
+					target.BuildArgsStr += fmt.Sprintf("--build-arg %s=%s", k, arg)
+
+					count++
+				}
+			}
+		}
 		c.repos[key] = repo
 	}
 }

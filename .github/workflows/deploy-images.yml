@@ -46,7 +46,7 @@ jobs:
         id: build
         env:
           IMAGE_DIRECTORY: images
-        run: ./ecr-image-checker run >> "$GITHUB_OUTPUT"
+        run: ./ecr-image-checker >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target

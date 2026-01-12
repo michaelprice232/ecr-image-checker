@@ -3,7 +3,8 @@ name: CI
 on: push
 
 jobs:
-  test:
+  unit-test:
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -17,3 +18,42 @@ jobs:
 
       - name: Summary coverage
         run: go tool cover -func=coverage.out | tail -n 1
+
+
+  dry-run:
+    name: Dry run
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: "arn:aws:iam::${{ vars.BASE_AWS_ACCOUNT }}:role/${{ vars.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ vars.BASE_REGION }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Build binary
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          go build -o ecr-image-checker ecr-image-checker.go
+          chmod +x ecr-image-checker
+
+      - name: Build target JSON
+        env:
+          IMAGE_DIRECTORY: images
+        run: ./ecr-image-checker >> "$GITHUB_ENV"
+
+      - name: Pretty print JSON
+        run: echo $targets | jq

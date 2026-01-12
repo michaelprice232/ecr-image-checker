@@ -13,6 +13,7 @@ func Test_validate(t *testing.T) {
 	repoName := "repo-1"
 	tagName := "alpine"
 	targetPlatforms := []string{"linux/arm64", "linux/amd64"}
+	buildArgs := map[string]string{"key": "value"}
 
 	cases := []struct {
 		testName    string
@@ -29,6 +30,7 @@ func Test_validate(t *testing.T) {
 				RepoName:            aws.String(repoName),
 				RepoTag:             aws.String(tagName),
 				TargetPlatforms:     targetPlatforms,
+				BuildArgs:           buildArgs,
 				Targets: []*Target{
 					{
 						AwsAccountId: aws.String(awsAccountID),
@@ -180,6 +182,46 @@ func Test_validate(t *testing.T) {
 				Targets: []*Target{
 					{
 						AwsRegion: aws.String(awsRegion),
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			testName: "Empty build_args map",
+			keyName:  "image-1/config.yml",
+			conf: repoConfig{
+				DefaultAwsAccountId: aws.String(awsAccountID),
+				DefaultRegion:       aws.String(awsRegion),
+				RepoName:            aws.String(repoName),
+				RepoTag:             aws.String(tagName),
+				TargetPlatforms:     targetPlatforms,
+				BuildArgs:           map[string]string{}, // Empty
+				Targets: []*Target{
+					{
+						AwsAccountId: aws.String(awsAccountID),
+						AwsRegion:    aws.String(awsRegion),
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			testName: "Empty build_args value",
+			keyName:  "image-1/config.yml",
+			conf: repoConfig{
+				DefaultAwsAccountId: aws.String(awsAccountID),
+				DefaultRegion:       aws.String(awsRegion),
+				RepoName:            aws.String(repoName),
+				RepoTag:             aws.String(tagName),
+				TargetPlatforms:     targetPlatforms,
+				BuildArgs: map[string]string{
+					"key": "", // empty value
+				},
+				Targets: []*Target{
+					{
+						AwsAccountId: aws.String(awsAccountID),
+						AwsRegion:    aws.String(awsRegion),
 					},
 				},
 			},

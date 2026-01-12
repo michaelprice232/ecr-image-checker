@@ -46,7 +46,7 @@ jobs:
         id: build
         env:
           IMAGE_DIRECTORY: images
-        run: ./ecr-image-checker run >> "$GITHUB_OUTPUT"
+        run: ./ecr-image-checker >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target
@@ -93,4 +93,4 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build & push Docker image
-        run: docker buildx build --push --platform ${{ matrix.target.target_platforms }} -t "${{ matrix.target.full_image_ref }}" ${{ matrix.target.working_directory }}
+        run: docker buildx build --push --platform ${{ matrix.target.target_platforms }} -t "${{ matrix.target.full_image_ref }}" ${{ matrix.target.build_args }} ${{ matrix.target.working_directory }}

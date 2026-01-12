@@ -106,7 +106,9 @@ func Run(imageDirectory string) error {
 		return fmt.Errorf("checking ECR tags: %w", err)
 	}
 
-	output, err := c.outputGitHubJSON()
+	missingTags := filterMissingTags(c.repos)
+
+	output, err := outputGitHubJSON(missingTags)
 	if err != nil {
 		return fmt.Errorf("outputting GitHub JSON: %w", err)
 	}
@@ -270,7 +272,7 @@ func (c *config) addCalculatedFields() {
 
 			target.WorkingDirectory = path.Dir(key)
 
-			if repo.TargetPlatforms != nil && len(repo.TargetPlatforms) > 0 {
+			if len(repo.TargetPlatforms) > 0 {
 				target.TargetPlatformStr = strings.Join(repo.TargetPlatforms, ",")
 			}
 
@@ -358,9 +360,7 @@ func (c *config) checkECRImageTags() error {
 	return nil
 }
 
-func (c *config) outputGitHubJSON() (string, error) {
-	missingTags := filterMissingTags(c.repos)
-
+func outputGitHubJSON(missingTags []Target) (string, error) {
 	// No Docker images to build
 	if len(missingTags) == 0 {
 		return "targets=[]", nil

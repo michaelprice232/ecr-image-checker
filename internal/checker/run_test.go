@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
+	ecrTypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -554,4 +557,116 @@ func Test_parseChildConfig(t *testing.T) {
 	require.Len(t, c.repos, 2)
 	require.Len(t, c.repos[childConfigOneKey].Targets, 2)
 	require.Len(t, c.repos[childConfigTwoKey].Targets, 1, "targets should be auto populated from defaults")
+}
+
+type mockECRClient struct{}
+
+func (m mockECRClient) ListImages(_ context.Context, input *ecr.ListImagesInput, _ ...func(*ecr.Options)) (*ecr.ListImagesOutput, error) {
+	var output ecr.ListImagesOutput
+
+	if input.RepositoryName != nil {
+		if *input.RepositoryName == "repo-1" {
+			output = ecr.ListImagesOutput{
+				ImageIds: []ecrTypes.ImageIdentifier{
+					{ImageTag: aws.String("v1")},
+					{ImageTag: aws.String("v2")},
+				},
+			}
+		}
+
+		if *input.RepositoryName == "repo-2" {
+			if input.NextToken != nil && *input.NextToken == "token" {
+				output = ecr.ListImagesOutput{
+					ImageIds: []ecrTypes.ImageIdentifier{
+						{ImageTag: aws.String("v2")},
+					},
+					NextToken: nil,
+				}
+				return &output, nil
+			}
+			output = ecr.ListImagesOutput{
+				ImageIds: []ecrTypes.ImageIdentifier{
+					{ImageTag: aws.String("v1")},
+				},
+				NextToken: aws.String("token"),
+			}
+		}
+	}
+
+	return &output, nil
+}
+
+func Test_checkECRImageTags(t *testing.T) {
+	cases := []struct {
+		testName       string
+		keyName        string
+		conf           repoConfig
+		expectTagFound bool
+	}{
+		{
+			testName: "Docker tag found",
+			keyName:  "image-1/config.yml",
+			conf: repoConfig{
+				RepoName: aws.String("repo-1"),
+				RepoTag:  aws.String("v2"),
+				Targets: []*Target{
+					{
+						AwsAccountId: aws.String("1111111111"),
+						AwsRegion:    aws.String("eu-west-3"),
+					},
+				},
+			},
+			expectTagFound: true,
+		},
+		{
+			testName: "Docker tag missing",
+			keyName:  "image-1/config.yml",
+			conf: repoConfig{
+				RepoName: aws.String("repo-1"),
+				RepoTag:  aws.String("missing"),
+				Targets: []*Target{
+					{
+						AwsAccountId: aws.String("1111111111"),
+						AwsRegion:    aws.String("eu-west-3"),
+					},
+				},
+			},
+			expectTagFound: false,
+		},
+		{
+			testName: "Paginated results",
+			keyName:  "image-2/config.yml",
+			conf: repoConfig{
+				RepoName: aws.String("repo-2"),
+				RepoTag:  aws.String("v2"),
+				Targets: []*Target{
+					{
+						AwsAccountId: aws.String("1111111111"),
+						AwsRegion:    aws.String("eu-west-3"),
+					},
+				},
+			},
+			expectTagFound: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+
+			c := config{
+				repos:     map[string]repoConfig{tc.keyName: tc.conf},
+				ecrClient: mockECRClient{},
+			}
+
+			err := c.checkECRImageTags(tc.keyName, 0, c.repos[tc.keyName], c.repos[tc.keyName].Targets[0])
+			require.NoError(t, err)
+
+			if tc.expectTagFound {
+				require.Equal(t, false, c.repos[tc.keyName].Targets[0].RemoteTagMissing)
+			} else {
+				require.Equal(t, true, c.repos[tc.keyName].Targets[0].RemoteTagMissing)
+			}
+		})
+	}
 }

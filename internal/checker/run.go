@@ -57,7 +57,7 @@ type config struct {
 
 	// AWS clients
 	stsClient *sts.Client
-	ecrClient *ecr.Client
+	ecrClient ecr.ListImagesAPIClient
 }
 
 func newConfig() (config, error) {
@@ -102,8 +102,16 @@ func Run(imageDirectory string) error {
 
 	c.addCalculatedFields()
 
-	if err = c.checkECRImageTags(); err != nil {
-		return fmt.Errorf("checking ECR tags: %w", err)
+	for key, repo := range c.repos {
+		for idx, target := range repo.Targets {
+			if err = c.setupECRClient(*target, *repo.RepoName); err != nil {
+				return fmt.Errorf("setting up ECR client: %w", err)
+			}
+
+			if err = c.checkECRImageTags(key, idx, repo, target); err != nil {
+				return fmt.Errorf("checking remote ECR Docker tags: %w", err)
+			}
+		}
 	}
 
 	missingTags := filterMissingTags(c.repos)
@@ -291,68 +299,60 @@ func (c *config) addCalculatedFields() {
 	}
 }
 
-func (c *config) checkECRImageTags() error {
-	for key, repo := range c.repos {
-		for idx, target := range repo.Targets {
-			if err := c.setupECRClient(*target, *repo.RepoName); err != nil {
-				return fmt.Errorf("setting up ECR client: %w", err)
-			}
+func (c *config) checkECRImageTags(key string, index int, repo repoConfig, target *Target) error {
+	remoteTagMissing := true
+	ecrImages := &ecr.ListImagesOutput{}
+	var err error
+	nextToken := ""
 
-			remoteTagMissing := true
-			ecrImages := &ecr.ListImagesOutput{}
-			var err error
-			nextToken := ""
+	for {
+		listImagesInput := &ecr.ListImagesInput{
+			RepositoryName: repo.RepoName,
+			Filter:         &ecrTypes.ListImagesFilter{TagStatus: ecrTypes.TagStatusTagged},
+		}
 
-			for {
-				listImagesInput := &ecr.ListImagesInput{
-					RepositoryName: repo.RepoName,
-					Filter:         &ecrTypes.ListImagesFilter{TagStatus: ecrTypes.TagStatusTagged},
-				}
+		if nextToken != "" {
+			listImagesInput.NextToken = aws.String(nextToken)
+		}
 
-				if nextToken != "" {
-					listImagesInput.NextToken = aws.String(nextToken)
-				}
+		// If not using an IAM assume role we need to set which remote ECR registry to query
+		if target.AWSRoleARN == "" {
+			slog.Debug("No assume role so setting list images target registry", "registry", *target.AwsAccountId)
+			listImagesInput.RegistryId = target.AwsAccountId
+		}
 
-				// If not using an IAM assume role we need to set which remote ECR registry to query
-				if target.AWSRoleARN == "" {
-					slog.Debug("No assume role so setting list images target registry", "registry", *target.AwsAccountId)
-					listImagesInput.RegistryId = target.AwsAccountId
-				}
+		ecrImages, err = c.ecrClient.ListImages(context.Background(), listImagesInput)
+		if err != nil {
+			return fmt.Errorf("listing ECR Docker tags for %s: %w", *repo.RepoName, err)
+		}
 
-				ecrImages, err = c.ecrClient.ListImages(context.Background(), listImagesInput)
-				if err != nil {
-					return fmt.Errorf("listing Docker tags for %s: %w", *repo.RepoName, err)
-				}
-
-				if ecrImages != nil {
-					for _, image := range ecrImages.ImageIds {
-						if image.ImageTag != nil && *image.ImageTag == *repo.RepoTag {
-							slog.Debug("Found image tag", "repo", *repo.RepoName, "tag", *repo.RepoTag)
-							remoteTagMissing = false
-							break
-						}
-					}
-				}
-
-				// Found remote image ref
-				if !remoteTagMissing {
+		if ecrImages != nil {
+			for _, image := range ecrImages.ImageIds {
+				if image.ImageTag != nil && *image.ImageTag == *repo.RepoTag {
+					slog.Debug("Found image tag", "repo", *repo.RepoName, "tag", *repo.RepoTag)
+					remoteTagMissing = false
 					break
 				}
-
-				// No more remote images to check
-				if ecrImages == nil || ecrImages.NextToken == nil {
-					break
-				}
-
-				nextToken = *ecrImages.NextToken
-			}
-
-			// Flag the Docker tag as needing to be built
-			if remoteTagMissing {
-				target.RemoteTagMissing = true
-				c.repos[key].Targets[idx] = target
 			}
 		}
+
+		// Found remote image ref
+		if !remoteTagMissing {
+			break
+		}
+
+		// No more remote images to check
+		if ecrImages == nil || ecrImages.NextToken == nil {
+			break
+		}
+
+		nextToken = *ecrImages.NextToken
+	}
+
+	// Flag the Docker tag as needing to be built
+	if remoteTagMissing {
+		target.RemoteTagMissing = true
+		c.repos[key].Targets[index] = target
 	}
 
 	return nil

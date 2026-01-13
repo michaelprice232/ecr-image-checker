@@ -28,25 +28,15 @@ jobs:
           role-to-assume: "arn:aws:iam::${{ vars.BASE_AWS_ACCOUNT }}:role/${{ vars.BASE_IAM_ROLE_NAME }}"
           aws-region: ${{ vars.BASE_REGION }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Build binary
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: 0
-        run: |
-          go build -o ecr-image-checker ecr-image-checker.go
-          chmod +x ecr-image-checker
-
       - name: Build target JSON
         id: build
         env:
           IMAGE_DIRECTORY: images
-        run: ./ecr-image-checker >> "$GITHUB_OUTPUT"
+          VERSION: v1.0.0
+        run: |
+          wget --quiet --output-document=ecr-image-checker https://github.com/michaelprice232/ecr-image-checker/releases/download/${{ env.VERSION }}/ecr-image-checker_Linux_x86_64
+          chmod +x ecr-image-checker
+          ./ecr-image-checker >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target
@@ -59,15 +49,6 @@ jobs:
         target: ${{ fromJSON(needs.generate.outputs.targets) }}
 
     steps:
-      - name: Show target
-        run: |
-          echo "aws_account_id=${{ matrix.target.aws_account_id }}"
-          echo "aws_region=${{ matrix.target.aws_region }}"
-          echo "aws_role_arn=${{ matrix.target.aws_role_arn }}"
-          echo "full_image_ref=${{ matrix.target.full_image_ref }}"
-          echo "target_platforms=${{ matrix.target.target_platforms }}"
-          echo "working_directory=${{ matrix.target.working_directory }}"
-
       - name: Checkout code
         uses: actions/checkout@v6
 
@@ -77,7 +58,6 @@ jobs:
           role-to-assume: "arn:aws:iam::${{ vars.BASE_AWS_ACCOUNT }}:role/${{ vars.BASE_IAM_ROLE_NAME }}"
           aws-region: ${{ vars.BASE_REGION }}
 
-      # Only required if the ECR repos are in different accounts and there are no resource level policies in place
       - name: Configure AWS credentials via assume role
         uses: aws-actions/configure-aws-credentials@v5
         with:

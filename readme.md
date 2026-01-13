@@ -1,21 +1,120 @@
-# ecr-image-checker
+# ECR Image Checker
 
-An app which parses the local repo for Docker config - one per root level directory - and checks whether the Docker tags exist in AWS ECR.
-It then outputs JSON config which is compatible with GitHub Action matrix builds for any that are missing so that they can be built.
-Designed to help create clean GitHub Action workflows for building Docker images for ECR in multi-image repos that typically contain lots of 
-utility images or local copies of upstream images. 
+`ecr-image-checker` is a small Go utility designed to be used inside **GitHub Actions workflows** to manage **multiple AWS ECR Docker images stored in a single GitHub repository**.
 
-The `config-defaults.yml` file can be used to define defaults which will be inherited by the child level `<image-direcotory>/<child-dir>/config.yml` files to keep things DRY.
-Supports building the same image across multiple AWS accounts and regions as well IAM cross account assume roles.
+It solves a very common problem:
 
-Todo:
+You have several small utility images or lightly-modified upstream images that don’t justify separate repositories, but you still want clean workflows, parallel builds, and immutable ECR safety.
 
-- Add unit tests
-- Make repo public and build with go-releaser so we can consume the binaries in other pipelines
+This tool parses per-image configuration, checks whether image tags already exist in ECR, and outputs a GitHub Actions–compatible matrix containing only the images that actually need building.
 
-## Running
+## Key Features
 
-```shell
-# Log level defaults to error. Image directory defaults to the current working directory
-IMAGE_DIRECTORY=images LOG_LEVEL=info go run ecr-image-checker.go
+- Supports multiple Docker images in one repo
+- Supports building for multiple AWS accounts and regions
+- Avoids duplicate builds and immutable ECR failures
+- Outputs JSON compatible with GitHub Actions matrix builds
+- Supports OIDC-only or OIDC + cross-account assume-role
+- Builds images in parallel
+- Keeps workflows simple and readable
+- Written in Go, distributed as a single binary
+
+## Repository Structure
+
+Each Docker image must live in its own directory and contain:
+
+- Dockerfile
+- config.yml
+
+Example:
+
+```text
+.
+├── config-defaults.yml
+├── image-a/
+│   ├── Dockerfile
+│   └── config.yml
+└── image-b/
+    ├── Dockerfile
+    └── config.yml
 ```
+
+By default, the project root is scanned.
+You can override this using the `IMAGE_DIRECTORY` environment variable to set a new base directory.
+
+## Configuration
+
+### Root Defaults (config-defaults.yml)
+
+These will be inherited by each image’s `config.yml` unless overridden.
+
+```yaml
+default_aws_account_id: 11111111111
+default_aws_region: eu-west-1
+default_aws_role_name: mike-ecr-query
+```
+
+### Image Config (config.yml)
+
+```yaml
+repo_name: mike-test
+repo_tag: alpine-3
+target_platforms:
+  - "linux/arm64"
+  - "linux/amd64"
+
+build_args:
+  BASE_IMAGE_TAG: "3"
+
+# If NO targets key is specified, use the defaults. Useful for single account/region deployment
+# If PART of the targets are missing, complete using the defaults
+targets:
+  # Inherits defaults
+  - aws_account_id: 11111111111
+
+#  # Explicit
+  - aws_account_id: 22222222222
+    aws_region: ap-northeast-1
+    aws_role_name: mike-ecr-query # assumes an IAM role when checking the ECR Docker tags
+```
+
+## How It Works
+
+1. Scan for config.yml files
+2. Merge with config-defaults.yml
+3. Check ECR for existing tags
+4. Skip existing images
+5. Output GitHub Actions matrix JSON
+6. A separate GitHub job in the workflow builds the images using the standard tooling
+
+## Environment Variables
+
+`IMAGE_DIRECTORY` – base directory to scan for image config
+
+`LOG_LEVEL` – debug, info, warn, error
+
+## IAM Roles
+
+The app is typically run in a GitHub workflow using an OIDC federated IAM role to grant AWS permissions.
+Depending on your setup there are two options for connecting to the various AWS accounts to build images.
+
+### Using IAM Assume Roles
+
+The app will assume IAM roles when connecting to each account target to check for image tags.
+The target matrix build job will use IAM role chaining via the normal `configure-aws-credentials` action.
+The IAM role must have the appropriate trust policy.
+
+An example IAM policy is [here](./examples/aws-policies/cross-account-assume-role).
+
+The `aws_role_name` must be set in either the child `config.yml` file or via a default (`default_aws_role_name`).
+
+### Using the base IAM Role
+
+The app will just use the base permissions assigned to the OIDC federated role.
+If going cross AWS account then you need to ensure the ECR repo resource policies are set up for this.
+There is an example [here](./examples/aws-policies/ecr-cross-account).
+
+## Example Workflows
+
+1. [Using a base OIDC role and cross account assume roles](./examples/gh-workflows/with-assume-roles/workflow.yml)
+2. [Using just the base OIDC role](./examples/gh-workflows/without-roles/workflow.yml)

@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::22222222222:root"
+      },
+      "Action": [
+        "sts:AssumeRole",
+        "sts:TagSession"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "22222222222"
+        },
+        "ArnLike": {
+          "aws:SourceArn": "arn:aws:iam::22222222222:role/oidc-role-name"
+        }
+      }
+    }
+  ]
+}

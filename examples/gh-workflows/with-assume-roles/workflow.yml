@@ -54,13 +54,18 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: "arn:aws:iam::${{ vars.BASE_AWS_ACCOUNT }}:role/${{ vars.BASE_IAM_ROLE_NAME }}"
+          aws-region: ${{ vars.BASE_REGION }}
+
+      - name: Configure AWS credentials via assume role
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ matrix.target.aws_role_arn }}
+          role-chaining: true
           aws-region: ${{ matrix.target.aws_region }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registries: "${{ matrix.target.aws_account_id }}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

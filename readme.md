@@ -118,3 +118,16 @@ There is an example [here](./examples/aws-policies/ecr-cross-account).
 
 1. [Using a base OIDC role and cross account assume roles](./examples/gh-workflows/with-assume-roles/workflow.yml)
 2. [Using just the base OIDC role](./examples/gh-workflows/without-roles/workflow.yml)
+
+## Running Locally
+
+```shell
+# Units tests
+make test
+
+# Coverage HTML report
+make coverage-html
+
+# Run the app using your config
+AWS_PROFILE=<profile> LOG_LEVEL=debug IMAGE_DIRECTORY=<dir> make run
+```

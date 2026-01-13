@@ -19,6 +19,18 @@ jobs:
       - name: Summary coverage
         run: go tool cover -func=coverage.out | tail -n 1
 
+  validate-goreleaser-conf:
+    name: Validate go-releaser conf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
 
   dry-run:
     name: Dry run

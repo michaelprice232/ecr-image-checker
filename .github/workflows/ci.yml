@@ -49,24 +49,14 @@ jobs:
           role-to-assume: "arn:aws:iam::${{ vars.BASE_AWS_ACCOUNT }}:role/${{ vars.BASE_IAM_ROLE_NAME }}"
           aws-region: ${{ vars.BASE_REGION }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Build binary
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: 0
-        run: |
-          go build -o ecr-image-checker ecr-image-checker.go
-          chmod +x ecr-image-checker
-
       - name: Build target JSON
         env:
           IMAGE_DIRECTORY: images
-        run: ./ecr-image-checker >> "$GITHUB_ENV"
+          VERSION: v1.0.0
+        run: |
+          wget --quiet --output-document=ecr-image-checker https://github.com/michaelprice232/ecr-image-checker/releases/download/${{ env.VERSION }}/ecr-image-checker_Linux_x86_64
+          chmod +x ecr-image-checker
+          ./ecr-image-checker >> "$GITHUB_ENV"
 
       - name: Pretty print JSON
         run: echo $targets | jq

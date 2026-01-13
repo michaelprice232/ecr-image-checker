@@ -25,10 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-
       - name: Validate
         uses: goreleaser/goreleaser-action@v6
         with:

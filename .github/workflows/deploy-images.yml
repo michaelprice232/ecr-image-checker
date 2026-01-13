@@ -35,7 +35,7 @@ jobs:
         run: |
           wget --quiet --output-document=ecr-image-checker https://github.com/michaelprice232/ecr-image-checker/releases/download/${{ env.VERSION }}/ecr-image-checker_Linux_x86_64
           chmod +x ecr-image-checker
-          ./ecr-image-checker >> "$GITHUB_ENV"
+          ./ecr-image-checker >> "$GITHUB_OUTPUT"
 
   run_for_each_target:
     name: Run per target

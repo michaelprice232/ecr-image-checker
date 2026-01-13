@@ -29,6 +29,7 @@ jobs:
           aws-region: ${{ vars.BASE_REGION }}
 
       - name: Build target JSON
+        id: build
         env:
           IMAGE_DIRECTORY: images
           VERSION: v1.0.0
